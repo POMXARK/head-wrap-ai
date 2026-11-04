@@ -9,6 +9,9 @@ import trimesh
 from PIL import Image
 
 
+FAR = 0.01  # target units (head height ~1)
+
+
 def read_uv_faces(path):
     """(vt array, faces as [(vi, ti) x3]) of head.obj; quads are split."""
     vt, F = [], []
@@ -60,7 +63,7 @@ def main():
     S = a.size
     img = np.zeros((S, S, 3), np.uint8)
     cov = np.zeros((S, S), bool)
-    pts, px = [], []
+    pts, px, nrm = [], [], []
     for f in F:
         uv = vt[[p[1] for p in f]] * S
         x0, y0 = np.floor(uv.min(0)).astype(int)
@@ -79,11 +82,21 @@ def main():
         bb = np.column_stack([1 - b[m].sum(1), b[m]])
         P = bb @ W[[p[0] for p in f]]
         pts.append(P)
+        n = np.cross(W[f[1][0]] - W[f[0][0]], W[f[2][0]] - W[f[0][0]])
+        nrm.append(np.tile(n / (np.linalg.norm(n) + 1e-12), (len(P), 1)))
         px.append(c[m].astype(int) - 0)
         px[-1] = np.floor(c[m]).astype(int)
     P = np.vstack(pts)
     px = np.vstack(px)
-    cp, _, tid = trimesh.proximity.closest_point(tgt, P)
+    N = np.vstack(nrm)
+    cp, dist, tid = trimesh.proximity.closest_point(tgt, P)
+    # texels far from the target (eyelids: the target has a pit there) look along the normal of the template into the
+    # target instead of taking the nearest point, which is skin beside the pit
+    far = np.where(dist > FAR)[0]
+    if len(far):
+        loc, ray, tri_hit = tgt.ray.intersects_location(P[far] + N[far] * 0.05, -N[far], multiple_hits=False)
+        cp[far[ray]], tid[far[ray]] = loc, tri_hit
+        print('texels far from the target', len(far), 'ray hits', len(ray))
     tri = tgt.vertices[tgt.faces[tid]]
     # barycentric of cp in the target triangle
     v0, v1, v2 = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0], cp - tri[:, 0]
