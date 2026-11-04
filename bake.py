@@ -49,6 +49,56 @@ def write_v(template, out, V):
             o.write('v %.5f %.5f %.5f\n' % tuple(next(it)) if l.startswith('v ') else l)
 
 
+CAM = {'front': (0, 0, 1), 'left': (1, 0, 0), 'back': (0, 0, -1), 'right': (-1, 0, 0)}  # towards the camera, as pdm_project_views.project
+
+
+def from_views(paths, tgt, W, F, P, N, col, size=1024, base=0.15, eps=0.03, far=None):
+    """Colour of every texel from the Qwen views: weight = facing^3 (cos to the camera, 0.5 -> 0, 0.85 -> 1) x visible
+    (a depth buffer of the wrapped template) x inside the figure; the atlas colour of the target is the base (weight `base`)."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'corsairs-remake', 'tools'))
+    import pdm_project_views as pv
+    from PIL import ImageDraw
+    lo, hi = tgt.vertices.min(0), tgt.vertices.max(0)
+    acc, wsum = col.astype(np.float32) * base, np.full(len(P), base, np.float32)
+    for name, path in zip(pv.NAMES, paths):
+        f, (x0, x1, y0, y1), inner = pv.load_view(path)
+        c = np.array(CAM[name], float)
+        # the depth buffer of the template in the (t, y) plane of the view
+        tv, yv = _tv(pv, name, W, lo, hi)
+        dep = W @ c
+        buf = Image.new('F', (size, size), -1e9)
+        dr = ImageDraw.Draw(buf)
+        fd = dep[F].mean(1)
+        n = np.cross(W[F[:, 1]] - W[F[:, 0]], W[F[:, 2]] - W[F[:, 0]])
+        for k in np.argsort(fd):
+            if n[k] @ c <= 0:
+                continue
+            dr.polygon([(tv[i] * (size - 1), (1 - yv[i]) * (size - 1)) for i in F[k]], fill=float(fd[k]))
+        buf = np.asarray(buf)
+        tp, yp = _tv(pv, name, P, lo, hi)
+        bx = np.clip((tp * (size - 1)).round().astype(int), 0, size - 1)
+        by = np.clip(((1 - yp) * (size - 1)).round().astype(int), 0, size - 1)
+        vis = (P @ c) >= buf[by, bx] - eps * (hi - lo).max()
+        qx = np.clip((x0 + tp * (x1 - x0)).astype(int), 0, f.shape[1] - 1)
+        qy = np.clip((y1 - yp * (y1 - y0)).astype(int), 0, f.shape[0] - 1)
+        cosv = N @ c
+        w = (np.clip((cosv - 0.5) / 0.35, 0, 1) ** 3 * vis * inner[qy, qx]).astype(np.float32)
+        if far is not None and name == 'front':  # eyelid texels (the target has a pit): the front view even at a grazing angle
+            w[far] = np.maximum(w[far], (np.clip(cosv[far] / 0.4, 0, 1) * vis[far] * inner[qy, qx][far]).astype(np.float32))
+        acc += f[qy, qx] * w[:, None]
+        wsum += w
+        print(f'{name}: texels with weight > 0.5: {int((w > 0.5).sum())}')
+    return (acc / wsum[:, None]).clip(0, 255).astype(np.uint8)
+
+
+def _tv(pv, name, X, lo, hi):
+    """(t, y) in [0, 1] of the points in the view, as pdm_project_views.project"""
+    y = (X[:, 1] - lo[1]) / (hi[1] - lo[1])
+    t = {'front': lambda: (X[:, 0] - lo[0]) / (hi[0] - lo[0]), 'back': lambda: (hi[0] - X[:, 0]) / (hi[0] - lo[0]),
+         'left': lambda: (hi[2] - X[:, 2]) / (hi[2] - lo[2]), 'right': lambda: (X[:, 2] - lo[2]) / (hi[2] - lo[2])}[name]()
+    return t, y
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('target')
@@ -56,7 +106,7 @@ def main():
     ap.add_argument('template')
     ap.add_argument('out')
     ap.add_argument('--size', type=int, default=2048)
-    ap.add_argument('--front', help='Qwen front view: texels facing the front take its pixel (sharper, the real eye)')
+    ap.add_argument('--views', nargs=4, help='Qwen views front left back right: a texel takes the pixel of the views that see it')
     a = ap.parse_args()
     tgt = trimesh.load(a.target, force='mesh')
     tex = np.asarray(tgt.visual.material.baseColorTexture.convert('RGB'))
@@ -90,6 +140,7 @@ def main():
         px.append(c[m].astype(int) - 0)
         px[-1] = np.floor(c[m]).astype(int)
     P = np.vstack(pts)
+    F = np.array([[p[0] for p in f] for f in F])
     px = np.vstack(px)
     N = np.vstack(nrm)
     cp, dist, tid = trimesh.proximity.closest_point(tgt, P)
@@ -118,20 +169,9 @@ def main():
     row = np.clip(S - 1 - px[:, 1], 0, S - 1)  # template v up -> image row down
     img[row, np.clip(px[:, 0], 0, S - 1)] = col
     cov[row, np.clip(px[:, 0], 0, S - 1)] = True
-    if a.front:
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'corsairs-remake', 'tools'))
-        import pdm_project_views as pv
-        f, (x0, x1, y0, y1), inner = pv.load_view(a.front)
-        lo, hi = tgt.vertices.min(0), tgt.vertices.max(0)
-        wgt = np.clip((N[:, 2] - 0.5) / 0.35, 0, 1)  # facing the front camera
-        qx = np.clip((x0 + (P[:, 0] - lo[0]) / (hi[0] - lo[0]) * (x1 - x0)).astype(int), 0, f.shape[1] - 1)
-        qy = np.clip((y1 - (P[:, 1] - lo[1]) / (hi[1] - lo[1]) * (y1 - y0)).astype(int), 0, f.shape[0] - 1)
-        ok = inner[qy, qx]  # only inside the figure (not the blended rim)
-        wgt = wgt * ok
-        q = f[qy, qx]
-        col = (col * (1 - wgt[:, None]) + q * wgt[:, None]).astype(np.uint8)
+    if a.views:
+        col = from_views(a.views, tgt, W, F, P, N, col, far=dist > FAR)
         img[row, np.clip(px[:, 0], 0, S - 1)] = col
-        print('texels from the front view', int((wgt > 0.5).sum()))
     Image.fromarray(img).save(a.out)
     print('texels', int(cov.sum()), 'of', S * S, '->', a.out)
 
