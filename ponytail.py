@@ -41,6 +41,9 @@ def spine(P, step=0.05, y_lo=-0.46, y_hi=0.02):
     return np.array(rows)[::-1]  # from the root (top) down
 
 
+BAND_RING, BAND_W, CURL = 2, 0.03, 0.10  # the band: ring of S (y -0.035), half width in v; the tip curls back by CURL (z)
+
+
 def tube(S, sides=24, sub=4):
     """a smooth tapered tube through the rings (cubic in between); returns vertices, uv, faces"""
     from scipy.interpolate import CubicSpline
@@ -50,6 +53,9 @@ def tube(S, sides=24, sub=4):
     R = cs(tt)
     R[:, 3:] = np.clip(R[:, 3:], 0.01, None)
     taper = 1 - 0.55 * (tt / tt[-1]) ** 2  # the tip is thinner
+    taper *= 1 - 0.25 * np.exp(-((tt - BAND_RING) / 0.35) ** 2)  # the hair is pinched by the band
+    f = np.clip((tt / tt[-1] - 0.7) / 0.3, 0, 1)
+    R[:, 2] -= CURL * f * f * (3 - 2 * f)  # the tip curls back as in the Qwen left view
     ang = np.linspace(0, 2 * np.pi, sides, endpoint=False)
     V, UV = [], []
     for k, (y, cx, cz, rx, rz) in enumerate(R):
@@ -76,6 +82,10 @@ def hair_texture(P, size=512, seed=1):
     along = rng.normal(0, 1, (size, 1)) * 0.15
     g = cols / cols.std() + along
     img = np.clip(m[None, None] * (1 + 0.28 * g[..., None]) * np.ones((size, size, 1)), 0, 255)
+    # the band: a darker stripe at the pinch (v from the top: ring BAND_RING of 10 rings)
+    v = 1 - BAND_RING / 10.0
+    r0, r1 = int((1 - v - BAND_W / 2) * size), int((1 - v + BAND_W / 2) * size)
+    img[r0:r1] = (img[r0:r1] * 0.45).astype(img.dtype)
     return img.astype(np.uint8)
 
 
