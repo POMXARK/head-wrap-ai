@@ -17,6 +17,7 @@ STEPS = {
     'build': ['headwrap.py', 'build'],
     'game': ['headwrap.py', 'game'],
     'all': ['headwrap.py', 'all'],
+    'mesh': ['mesh_score.py', 'work/hero1_eye.glb', '--png', 'work/mesh_score.png', '--json', 'work/mesh_score.json'],
     'eyes': ['eye_score.py', 'work/hero1_eye.glb', 'work/eye_open.json', '--png', 'work/eye_score.png', '--json',
              'work/eye_score.json'],
 }
@@ -67,16 +68,21 @@ def state():
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Конвейер головы</title>
 <style>body{font:14px sans-serif;margin:16px;max-width:1200px}button{font-size:14px;padding:6px 12px;margin:2px}
 pre{background:#111;color:#ccc;padding:8px;height:260px;overflow:auto;font-size:12px}table{border-collapse:collapse;font-size:12px}
-td,th{border:1px solid #bbb;padding:2px 6px;text-align:right}.bad{background:#fcc}.ok{color:#080}.row{display:flex;gap:16px;flex-wrap:wrap}
+table.btns td{text-align:left;border:0;font-size:14px}td,th{border:1px solid #bbb;padding:2px 6px;text-align:right}.bad{background:#fcc}.ok{color:#080}.row{display:flex;gap:16px;flex-wrap:wrap}
 .row>div{flex:1;min-width:340px}img{max-width:100%;border:1px solid #888}model-viewer{width:100%;height:380px;background:#ddd}</style>
 <a href="/">&larr; head-wrap-ai</a><h2>Конвейер головы</h2>
-<div>
-<button onclick="go('status')">Состояние</button><button onclick="go('texture')">Текстура</button>
-<button onclick="go('build')"><b>Собрать голову</b></button><button onclick="go('eyes')">Оценка глаз</button>
-Модель: <select id=mdl><option>hero1</option><option>hero</option></select><button onclick="go('game')">В игру</button>
-<button onclick="go('all')">Всё</button> <span id=st></span></div>
+<p>Голова собирается из готовых промежуточных файлов (<code>work/</code>) шагами сверху вниз. Кнопки запускают ровно эти шаги; результат — файл <code>work/hero1_eye.glb</code>, он же показан справа в 3D.</p>
+<table class=btns>
+<tr><td><button onclick="go('status')">Состояние</button></td><td>Показать, какие файлы шагов есть и свежие ли они. Ничего не меняет.</td></tr>
+<tr><td><button onclick="go('texture')">Текстура</button></td><td>Пересобрать цвет кожи головы (подгонка цвета, швы шеи, нейрозаливка LaMa). Долго. Нужна, если меняли исходную картинку.</td></tr>
+<tr><td><button onclick="go('build')"><b>Собрать голову</b></button></td><td>Главная кнопка: собрать модель головы с глазами и хвостом в <code>hero1_eye.glb</code> и сразу оценить глаза и всю сетку.</td></tr>
+<tr><td><button onclick="go('eyes')">Оценка глаз</button></td><td>Только оценка глаз готовой модели (видны ли, раскрыты ли, нет ли складки): таблица и картинка слева.</td></tr>
+<tr><td><button onclick="go('mesh')">Оценка сетки</button></td><td>Оценка всей головы: осколки, растянутая текстура (щека, ухо, шея, челюсть). Картинка профиля — ниже, синие и красные точки — дефекты.</td></tr>
+<tr><td>Модель: <select id=mdl><option>hero1</option><option>hero</option></select> <button onclick="go('game')">В игру</button></td><td>Положить собранную голову в игру для выбранной модели (hero или hero1) и снять рендеры. Перезаписывает файлы игры.</td></tr>
+<tr><td><button onclick="go('all')">Всё</button></td><td>Собрать → в игру → рендер одним нажатием.</td></tr>
+</table><div><span id=st></span></div>
 <h3>Журнал</h3><pre id=lg></pre>
-<div class=row><div><h3>Оценка глаз по мешам</h3><div id=sc>нет данных — нажмите «Оценка глаз»</div><br><img id=im hidden></div>
+<div class=row><div><h3>Оценка глаз по мешам</h3><div id=sc>нет данных — нажмите «Оценка глаз»</div><br><img id=im hidden><h3>Оценка сетки (профиль)</h3><img id=mi hidden onerror="this.hidden=true"></div>
 <div><h3>Голова (3D)</h3><model-viewer id=mv camera-controls auto-rotate shading-intensity=1 exposure=1.1></model-viewer>
 <div id=mvn class=h></div></div></div>
 <script type=module src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
@@ -93,6 +99,7 @@ $('st').textContent=s.running?('идёт: '+s.running+' …'):(s.rc==null?'':(s.
 $('lg').textContent=s.lines.join('\\n');$('lg').scrollTop=1e9;
 if(s.eyes){$('sc').innerHTML=table(s.eyes)}
 if(s.has_png){$('im').hidden=false;$('im').src='/api/img?p=work/eye_score.png&t='+(s.eyes?Math.round(s.eyes.score*1000):0)}
+if(!s.running&&s.rc===0&&window.mT!=s.lines.length){window.mT=s.lines.length;$('mi').hidden=false;$('mi').src='/api/img?p=work/mesh_score.png&t='+Date.now()}
 if(s.glb&&!s.running){const t=s.rc+'|'+s.lines.length;if(t!=glbT){glbT=t;$('mv').src='/api/file?f='+s.glb+'&t='+Date.now();$('mvn').textContent=s.glb}}}
 setInterval(poll,2000);poll()
 </script>"""
