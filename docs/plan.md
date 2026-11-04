@@ -207,4 +207,4 @@ head_auto) правит **сгенерированную сетку**. Оцен�
 ## Шов шеи: LaMa (lama_seam.py)
 - Шов в профиле — граница UV-острова шеи, а не светлое пятно. Нейросеть LaMa (big-lama.pt, simple-lama-inpainting, CPU, лежат в `$W/lama`, не в git) заливает полосу через границу острова + светлые выбросы.
 - Порядок важен: сначала `padedge.py` (иначе LaMa берёт контекст из чёрного фона, и линия темнеет), затем `lama_seam.py`, затем `padedge.py` снова: baked28n → pad28n → baked28l → baked29.
-- Результат: `docs/img/neck_lama.png` (рендер front/left), шов почти не виден. Проверка в живой игре: снимок захватил рабочий стол, `error.log` пуст; кадр игры повторить.
+- Результат: `docs/img/neck_lama.png` (рендер front/left), шов почти не виден. Живая игра: `docs/img/ingame_neck_lama.png`, шея чистая, `error.log` пуст.
