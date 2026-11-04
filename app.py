@@ -94,7 +94,7 @@ PAGE = """<!doctype html><meta charset=utf-8><title>head-wrap-ai</title>
 <style>body{font:14px sans-serif;margin:20px;max-width:900px}pre{background:#111;color:#ccc;padding:8px;height:220px;overflow:auto}
 input,select{margin:2px}.ok{color:#080}.bad{color:#b00}</style>
 <h2>head-wrap-ai</h2><p>Этап 0: профили моделей. Остальные этапы — <code>docs/plan.md</code>.</p>
-<p><a href="/model"><b>Модель: части, импорт, замена</b></a> &nbsp; <a href="/review"><b>Сравнение вариантов (лучше/хуже)</b></a></p><h3>Профили моделей</h3><div id=pr></div><button onclick=add()>+ профиль</button> <button onclick=sv()>Сохранить</button>
+<p><a href="/pipeline"><b>Конвейер головы: собрать, оценить, в игру</b></a> &nbsp; <a href="/model"><b>Модель: части, импорт, замена</b></a> &nbsp; <a href="/review"><b>Сравнение вариантов (лучше/хуже)</b></a></p><h3>Профили моделей</h3><div id=pr></div><button onclick=add()>+ профиль</button> <button onclick=sv()>Сохранить</button>
 <h3>Журнал</h3><pre id=lg></pre>
 <script>
 let C={};const $=i=>document.getElementById(i);
@@ -187,6 +187,18 @@ class H(BaseHTTPRequestHandler):
             self.send(load())
         elif path == '/api/log':
             self.send(LOG)
+        elif path == '/pipeline':
+            import pipeline
+            self.send(pipeline.PAGE, 'text/html')
+        elif path == '/api/run':
+            import pipeline
+            self.send(pipeline.state())
+        elif path == '/api/file':  # a built .glb of this folder for the 3D view
+            f = os.path.realpath(os.path.join(HERE, urllib.parse.parse_qs(q).get('f', [''])[0]))
+            if not f.startswith(HERE + os.sep) or not f.endswith('.glb') or not os.path.isfile(f):
+                self.send_error(403)
+            else:
+                self.send(open(f, 'rb').read(), 'model/gltf-binary')
         elif path == '/model':
             self.send(MODEL, 'text/html')
         elif path == '/api/model':
@@ -276,6 +288,12 @@ class H(BaseHTTPRequestHandler):
             acc = review.vote(int(d['id']), d['choice'], d.get('note', ''))
             log(f"выбор по паре {d['id']}: {d['choice']}; оценщик, точность на выборах: {acc}")
             self.send({'ok': True, 'acc': acc})
+            return
+        if self.path == '/api/run':
+            import pipeline
+            j = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            log('шаг конвейера: %s' % j.get('step'))
+            self.send({'error': pipeline.run(j.get('step'), j.get('model', 'hero1'))})
             return
         if self.path == '/api/config':
             save(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
