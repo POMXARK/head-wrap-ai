@@ -25,12 +25,37 @@ def fit(target, tpl, iters=30):
     return out, M, cost
 
 
-def nonrigid(target, tpl):
+def free_weights(tpl_base, eyes_path='template/eyes.obj', r_eye=0.55):
+    """vertex weights of the template (base units, before the similarity move): 0 = not pulled to the target, only the
+    stiffness moves the vertex with its neighbours (eyelids, ears: the target has a pit and a flat leaf there)"""
+    ev = trimesh.load(eyes_path, process=False).vertices
+    c = [ev[ev[:, 0] > 0].mean(0), ev[ev[:, 0] < 0].mean(0)]
+    V = tpl_base.vertices
+    w = np.ones(len(V))
+    for e in c:
+        w[np.linalg.norm(V - e, axis=1) < r_eye] = 0
+    w[(np.abs(V[:, 0]) > 1.05) & (V[:, 1] > 6.4) & (V[:, 1] < 7.6) & (V[:, 2] < 0.9)] = 0
+    return w
+
+
+def nonrigid(target, tpl, weights=None):
     """steps: [stiffness, landmark weight, normal weight, iterations]; the stiffness falls, the template follows the target"""
     P = reg.nricp_amberg(tpl, target, steps=[[0.01, 10, 0.5, 10], [0.003, 5, 0.1, 10], [0.001, 2, 0.05, 10]],
                          eps=1e-4, gamma=1, distance_threshold=0.05)
     out = tpl.copy()
     out.vertices = P
+    if weights is not None:  # the free vertices keep the shape of the template: only a smooth shift of their neighbours
+        D = P - tpl.vertices
+        free = weights == 0
+        nb = [[] for _ in range(len(P))]
+        for a, b in tpl.edges_unique:
+            nb[a].append(b)
+            nb[b].append(a)
+        D[free] = 0
+        for _ in range(300):
+            for i in np.where(free)[0]:
+                D[i] = D[nb[i]].mean(0)
+        out.vertices = tpl.vertices + D
     return out
 
 
@@ -39,7 +64,7 @@ def main():
     tpl = trimesh.load(sys.argv[2], process=False)
     out, M, cost = fit(tgt, tpl)
     print('similarity icp cost', cost, 'scale', np.cbrt(abs(np.linalg.det(M[:3, :3]))))
-    out = nonrigid(tgt, out)
+    out = nonrigid(tgt, out, free_weights(tpl))
     d = tgt.nearest.on_surface(out.vertices)[1]
     print('distance to target: mean %.4f max %.4f, >3%% of head: %d vertices' % (d.mean(), d.max(), (d.size and (d > 0.03).sum())))
     out.export(sys.argv[3])
