@@ -84,6 +84,8 @@ def build(P, out_obj, out_png, scale=0.65):
     S = spine(P)
     S[:, 3:] *= scale
     S[0, 0], S[0, 2] = 0.03, -0.27  # the root sits inside the back of the head
+    S[1, 2] = max(S[1, 2], -0.31)  # the first ring leaves the skull gradually (back of the head at y 0: z -0.28)
+    S = np.vstack([[0.08, 0.0, -0.255, 0.05, 0.05], S])  # a ring inside the hair mass above: no gap at the nape
     V, UV, F = tube(S)
     Image.fromarray(hair_texture(P)).save(out_png)
     with open(out_obj, 'w') as f:
