@@ -22,7 +22,10 @@ def add(**r):
 
 def main():
     ap = argparse.ArgumentParser(usage=__doc__)
-    ap.add_argument('cmd', choices=['add', 'show'])
+    ap.add_argument('cmd', choices=['add', 'show', 'rate', 'auto'])
+    ap.add_argument('--n', type=int, default=-1, help='rate: step number from `show` (default: the last)')
+    ap.add_argument('--before'); ap.add_argument('--after'); ap.add_argument('--target')
+    ap.add_argument('--views', nargs=4)
     ap.add_argument('--stage', type=int)
     ap.add_argument('--problem')
     ap.add_argument('--tool')
@@ -32,10 +35,30 @@ def main():
     ap.add_argument('--verdict', choices=['better', 'same', 'worse', 'partial', 'deadend', 'unknown'])
     ap.add_argument('--note', default='')
     a = ap.parse_args()
+    if a.cmd == 'rate':  # the user's verdict on a step: stronger than the automatic one (agent.stats)
+        L = open(PATH).read().splitlines()
+        i = a.n if a.n >= 0 else len(L) - 1
+        r = json.loads(L[i])
+        r['user_verdict'] = a.verdict
+        if a.note:
+            r['user_note'] = a.note
+        L[i] = json.dumps(r, ensure_ascii=False)
+        open(PATH, 'w').write('\n'.join(L) + '\n')
+        print('step', i, r.get('problem'), r.get('tool'), '->', a.verdict)
+        return
+    if a.cmd == 'auto':  # the verdict comes from the silhouette IoU of the result before and after (metrics.py)
+        import metrics
+        b = metrics.evaluate(a.before, a.target, a.views)
+        c = metrics.evaluate(a.after, a.target, a.views)
+        v = metrics.verdict_for(b, c)
+        add(stage=a.stage, problem=a.problem, tool=a.tool, params=json.loads(a.params),
+            metrics={'iou_before': b['mean_iou'], 'iou_after': c['mean_iou']}, image=a.image, verdict=v, note=a.note)
+        print(v, round(b['mean_iou'], 4), '->', round(c['mean_iou'], 4))
+        return
     if a.cmd == 'show':
-        for l in open(PATH):
+        for i, l in enumerate(open(PATH)):
             r = json.loads(l)
-            print(r['ts'][5:16], r.get('stage'), r.get('problem'), r.get('tool'), r.get('params'), r.get('metrics'), r.get('verdict'))
+            print(i, r['ts'][5:16], r.get('stage'), r.get('problem'), r.get('tool'), r.get('params'), r.get('metrics'), r.get('verdict'))
         return
     add(stage=a.stage, problem=a.problem, tool=a.tool, params=json.loads(a.params),
         metrics={k: float(v) for k, v in (m.split('=') for m in a.metric)}, image=a.image, verdict=a.verdict, note=a.note)

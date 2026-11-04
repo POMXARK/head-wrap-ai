@@ -42,6 +42,11 @@ CATALOG = {
         ('judge.py', {'model': 'ministral-3:14b', 'mode': 'metric_only'}, 'distance, silhouette IoU, no VLM (to write)'),
         ('judge.py', {'model': 'qwen3:32b', 'mode': 'score_one'}, 'one plan, calibrated score, other model (to write)'),
     ],
+    'chin_line': [
+        ('fillgaps.py', {}, 'fill pure-black texels (cracks)'),
+        ('seamblend.py', {}, 'blend colour across UV seams'),
+        ('lip_mesh_check.py', {}, 'cut parts of the lips mesh out of the render one by one (to write)'),
+    ],
 }
 
 
@@ -54,10 +59,13 @@ def stats(path=journal.PATH):
     for l in open(path):
         r = json.loads(l)
         v = REWARD.get(r.get('verdict'))
-        if v is None or not r.get('problem') or not r.get('tool'):
+        u = REWARD.get(r.get('user_verdict'))
+        if (v is None and u is None) or not r.get('problem') or not r.get('tool'):
             continue
-        arm[(r['problem'], key(r['tool'], r.get('params', {})))].append(v)
-        tool[(r['problem'], r['tool'])].append(v)
+        # the user's verdict counts twice and replaces the automatic one
+        vals = [u, u] if u is not None else [v]
+        arm[(r['problem'], key(r['tool'], r.get('params', {})))].extend(vals)
+        tool[(r['problem'], r['tool'])].extend(vals)
     return arm, tool
 
 
