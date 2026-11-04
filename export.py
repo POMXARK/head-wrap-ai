@@ -54,6 +54,28 @@ def smooth_pits(W, F, polys):  # sys.argv[1] is the wrapped obj
     return W
 
 
+def lama_fill(img, mask):
+    """The masked texels filled by LaMa (open source neural inpaint, as lama_seam.py): the grain of the face skin goes
+    over the area, not a flat colour; cv2 Telea if the model is not there."""
+    import os
+    import cv2
+    W = os.environ.get('W', '/media/roman/383be9ee-c114-4bf8-8956-66b985661cb4/home/remake-linux')
+    os.environ.setdefault('LAMA_MODEL', W + '/lama/big-lama.pt')
+    try:
+        sys.path.insert(0, W + '/lama/pkg')
+        from simple_lama_inpainting import SimpleLama
+        ys, xs = np.where(mask > 0)
+        y0, y1, x0, x1 = max(ys.min() - 40, 0), ys.max() + 41, max(xs.min() - 40, 0), xs.max() + 41
+        res = np.array(SimpleLama()(Image.fromarray(img[y0:y1, x0:x1]), Image.fromarray(mask[y0:y1, x0:x1])))
+        out = img.copy()
+        h, w = img[y0:y1, x0:x1].shape[:2]
+        out[y0:y1, x0:x1] = res[:h, :w]
+        return out
+    except Exception as e:  # noqa: BLE001
+        print('lama unavailable, cv2 inpaint:', e)
+        return cv2.inpaint(img, mask, 7, cv2.INPAINT_TELEA)
+
+
 def under_eye_mask(W, vt, F, drop, polys, tex):
     """The texture with the flat pink circles under the eyes painted over from the skin around them (ours): the
     kept faces in the opening of the eye (the lower lid) got the colour of the pit of the bake, not the skin."""
@@ -77,7 +99,10 @@ def under_eye_mask(W, vt, F, drop, polys, tex):
                 d.polygon([(vt[u][0] * S, (1 - vt[u][1]) * S) for _, u in f], fill=255)
     mask = cv2.dilate(np.array(m), np.ones((5, 5), np.uint8))
     print('under-eye texels painted over', int((mask > 0).sum()))
-    return Image.fromarray(cv2.inpaint(img, mask, 7, cv2.INPAINT_TELEA))
+    inp = lama_fill(img, mask).astype(float)
+    # feathered edge: no round spot where the painted area ends
+    a = cv2.GaussianBlur(cv2.dilate(mask, np.ones((9, 9), np.uint8)).astype(float) / 255, (0, 0), 9)[..., None]
+    return Image.fromarray((inp * a + img * (1 - a)).clip(0, 255).astype(np.uint8))
 
 
 def obj_mesh(vpath, tpath, tex, polys=None, W=None):
