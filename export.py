@@ -13,7 +13,8 @@ UNDER_SCALE = 2.2  # the opening of the eye is taken this much bigger for the fa
 
 
 PIT_SCALE = 3.0  # the pit round the eye is smoothed within this many times the opening
-PIT_ITERS = 400
+PIT_RINGS = 6  # rings of vertices round the pit that are filled with it
+FREE = set()  # the vertices of the pits (smooth_pits): their UV is refitted from the skin round them (fit_uv)
 PIT_Z = 0.32  # vertices of the face behind this depth under the eye are the floor of the pit
 
 
@@ -35,6 +36,11 @@ def smooth_pits(W, F, polys):  # sys.argv[1] is the wrapped obj
         w, h = np.ptp(p[:, 0]), np.ptp(p[:, 1])
         # the floor of the socket of the wrap: flat plate far behind the cheek (z < PIT_Z); its edge is the wall = the fold
         free |= (np.abs(W[:, 0] - c[0]) < 1.3 * w) & (W[:, 1] < c[1] + 2.5 * h) & (W[:, 1] > c[1] - 5 * h) & (W[:, 2] > 0.25) & (W[:, 2] < PIT_Z)
+    for _ in range(PIT_RINGS):  # a few rings of the lip round the pit too: no step where the plate meets the cheek
+        grown = free.copy()
+        for i in np.where(free)[0]:
+            grown[list(nb[i])] = True
+        free = grown & (W[:, 2] > 0.25)
     idx = np.where(free)[0]
     # harmonic fill: the free vertices take the mean of their neighbours, the vertices round the pit stay (exact solve)
     import scipy.sparse as sp
@@ -50,6 +56,8 @@ def smooth_pits(W, F, polys):  # sys.argv[1] is the wrapped obj
             else:
                 b[k] += W[j, 2]
     W[idx, 2] = spsolve(A.tocsr(), b)
+    FREE.clear()
+    FREE.update(int(i) for i in idx)
     print('pit vertices smoothed', len(idx), 'max shift', float(abs(W[idx, 2] - np.array(read_v(sys.argv[1]))[idx, 2]).max()))
     return W
 
@@ -105,10 +113,45 @@ def under_eye_mask(W, vt, F, drop, polys, tex):
     return Image.fromarray((inp * a + img * (1 - a)).clip(0, 255).astype(np.uint8))
 
 
+def fit_uv(W, vt, F):
+    """The UV of the pit vertices from the skin round them (ours): the template UV of the old eye socket is cramped (a
+    few texels over the whole dish: blocks of magnified texture). The UV of the vertices outside the pit, a quadratic
+    in (x, y) fitted to them (robust), is taken over the pit: the dish shows the face texture at its true scale."""
+    if not FREE:
+        return vt, F
+    uvs = {}
+    for f in F:
+        for v, u in f:
+            uvs.setdefault(v, set()).add(u)
+    free = np.array(sorted(FREE))
+    lo, hi = W[free][:, :2].min(0), W[free][:, :2].max(0)
+    pad = 0.35 * (hi - lo)
+    ring = [v for v, us in uvs.items() if v not in FREE and len(us) == 1 and W[v, 2] > 0.25
+            and (lo - pad <= W[v, :2]).all() and (W[v, :2] <= hi + pad).all()]
+    X = np.array([[1, W[v, 0], W[v, 1], W[v, 0] ** 2, W[v, 0] * W[v, 1], W[v, 1] ** 2] for v in ring])
+    T = np.array([vt[next(iter(uvs[v]))] for v in ring])
+    keep = np.ones(len(ring), bool)
+    for _ in range(4):
+        C = np.linalg.lstsq(X[keep], T[keep], rcond=None)[0]
+        r = np.linalg.norm(X @ C - T, axis=1)
+        keep = r < max(3 * np.median(r[keep]), 1e-4)
+    vt = list(vt)
+    new = {}
+    for v in FREE:
+        x, y = W[v, 0], W[v, 1]
+        new[v] = len(vt)
+        vt.append(np.array([1, x, y, x * x, x * y, y * y]) @ C)
+    F = [[(v, new.get(v, u)) for v, u in f] for f in F]
+    print('pit uv refitted: %d vertices from %d ring vertices, residual %.5f' % (len(FREE), int(keep.sum()), float(np.median(r[keep]))))
+    return vt, F
+
+
 def obj_mesh(vpath, tpath, tex, polys=None, W=None):
     W = read_v(vpath) if W is None else W
     vt, F = read_uv_faces(tpath)
     under = None
+    if polys and FREE:
+        vt, F = fit_uv(W, vt, F)
     if polys:
         import eye_slit
         drop = eye_slit.drop_mask(W, F, polys)
@@ -126,6 +169,14 @@ def obj_mesh(vpath, tpath, tex, polys=None, W=None):
             t.append(pairs[k])
         faces.append(t)
     V = np.array([W[v] for v, _ in idx])
+    if polys and FREE:  # the faces of the pit folded by the wrap look away: turn them to the front
+        fa = np.array(faces)
+        nrm = np.cross(V[fa[:, 1]] - V[fa[:, 0]], V[fa[:, 2]] - V[fa[:, 0]])
+        inpit = np.array([all(idx[i][0] in FREE for i in f) for f in faces])
+        flip = inpit & (nrm[:, 2] < 0)
+        fa[flip] = fa[flip][:, ::-1]
+        faces = fa.tolist()
+        print('pit faces turned to the front:', int(flip.sum()))
     UV = np.array([vt[u] for _, u in idx])
     m = trimesh.Trimesh(V, np.array(faces), process=False)
     m.visual = trimesh.visual.TextureVisuals(uv=UV, material=trimesh.visual.material.PBRMaterial(
@@ -158,7 +209,7 @@ def main():
                 sc.add_geometry(m, node_name='eye_' + k)
         else:  # one patch per eye in the very hole of the slit, both on one atlas (the blink of the engine, eyes.ini)
             import eye_patch
-            vt, F = read_uv_faces(a[1])
+            vt, F = fit_uv(W, *read_uv_faces(a[1]))
             m, windows, skin_row = eye_patch.patches(W, F, eye_slit.drop_mask(W, F, polys), polys, view, *tgt.bounds,
                                                   head=(vt, np.array(Image.open(a[2]).convert('RGB'), float)))
             sc.add_geometry(m, node_name='eyes')

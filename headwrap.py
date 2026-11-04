@@ -72,6 +72,10 @@ def build():
         w('ponytail_tube.obj'), w('ponytail_hair28.png'), '--slit', w('eye_open.json'),
         '../glbcheck/hero1_head_front.png', '../glbcheck/hv4/auto.glb', '--eyes-json',
         '../corsairs-remake/tools/eyes_ai.json', 'ai_hero_head_1,ai_hero1_head_1')
+    # offline gate: the eyes are scored from the meshes (eye_score.py), a table is printed, a low score is a warning
+    r = subprocess.run(['python3', 'eye_score.py', w('hero1_eye.glb'), w('eye_open.json')], cwd=HERE)
+    if r.returncode:
+        print('WARNING: eye_score reports failed checks (see the table above)')
 
 
 def game(model):

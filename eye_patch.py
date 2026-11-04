@@ -137,7 +137,7 @@ def patches(W, F, drop, polys, view, lo, hi, head=None):
         loop = [l for l in loops if np.linalg.norm(W[l][:, :2].mean(0) - c) < 0.5 * np.ptp(P0[:, 0])]
         if not loop:
             raise SystemExit(f'eye_patch: no hole around the eye {k}')
-        loop = loop[0]
+        loop = max(loop, key=lambda l: np.ptp(W[l][:, 0]))  # the outer loop: islands of kept faces in a wide hole make small ones
         L = W[loop]
         scale = WINDOW_W / np.ptp(P0[:, 0])  # texels per head unit
         cu, cv = CENTRE[k]
