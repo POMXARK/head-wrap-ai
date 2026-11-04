@@ -14,7 +14,10 @@ UNDER_SCALE = 2.2  # the opening of the eye is taken this much bigger for the fa
 
 
 PIT_SCALE = 3.0  # the pit round the eye is smoothed within this many times the opening
+BROW_FADE = (0.1, 0.7)  # above the eye top: the pit fill fades out between these heights of the eye (full -> none): the brows stay original
+BROW_GAP = 99  # the pit is filled up to the top of the eye plus this of its height: the brows stay as they were
 PIT_RINGS = 6  # rings of vertices round the pit that are filled with it
+WEIGHT = {}  # the weight of the pit fill per vertex (1 at the eye, 0 up at the brows)
 FREE = set()  # the vertices of the pits (smooth_pits): their UV is refitted from the skin round them (fit_uv)
 PIT_Z = 0.32  # vertices of the face behind this depth under the eye are the floor of the pit
 
@@ -36,12 +39,13 @@ def smooth_pits(W, F, polys):  # sys.argv[1] is the wrapped obj
         c = p.mean(0)
         w, h = np.ptp(p[:, 0]), np.ptp(p[:, 1])
         # the floor of the socket of the wrap: flat plate far behind the cheek (z < PIT_Z); its edge is the wall = the fold
-        free |= (np.abs(W[:, 0] - c[0]) < 1.3 * w) & (W[:, 1] < c[1] + 2.5 * h) & (W[:, 1] > c[1] - 5 * h) & (W[:, 2] > 0.25) & (W[:, 2] < PIT_Z)
+        free |= (np.abs(W[:, 0] - c[0]) < 1.3 * w) & (W[:, 1] < p[:, 1].max() + BROW_GAP * h) & (W[:, 1] > c[1] - 5 * h) & (W[:, 2] > 0.25) & (W[:, 2] < PIT_Z)
+    ytop = max(np.array(p)[:, 1].max() + BROW_GAP * np.ptp(np.array(p)[:, 1]) for p in polys.values())
     for _ in range(PIT_RINGS):  # a few rings of the lip round the pit too: no step where the plate meets the cheek
         grown = free.copy()
         for i in np.where(free)[0]:
             grown[list(nb[i])] = True
-        free = grown & (W[:, 2] > 0.25)
+        free = grown & (W[:, 2] > 0.25) & (W[:, 1] < ytop)  # never up into the brows
     idx = np.where(free)[0]
     # harmonic fill: the free vertices take the mean of their neighbours, the vertices round the pit stay (exact solve)
     import scipy.sparse as sp
@@ -58,7 +62,14 @@ def smooth_pits(W, F, polys):  # sys.argv[1] is the wrapped obj
     LtL = (Lp.T @ Lp).tocsr()
     fixed = np.setdiff1d(np.arange(n), idx)
     rhs = -LtL[idx][:, fixed] @ W[fixed, 2]
-    W[idx, 2] = spsolve(LtL[idx][:, idx].tocsc(), rhs)
+    znew = spsolve(LtL[idx][:, idx].tocsc(), rhs)
+    top = max(np.array(p)[:, 1].max() for p in polys.values())
+    hgt = float(np.mean([np.ptp(np.array(p)[:, 1]) for p in polys.values()]))
+    t = np.clip((W[idx, 1] - top - BROW_FADE[0] * hgt) / ((BROW_FADE[1] - BROW_FADE[0]) * hgt), 0, 1)
+    wgt = 1 - t * t * (3 - 2 * t)  # 1 at the eye, 0 at the brows
+    W[idx, 2] = wgt * znew + (1 - wgt) * W[idx, 2]
+    WEIGHT.clear()
+    WEIGHT.update({int(v): float(x) for v, x in zip(idx, wgt)})
     FREE.clear()
     FREE.update(int(i) for i in idx)
     print('pit vertices smoothed', len(idx), 'max shift', float(abs(W[idx, 2] - np.array(read_v(sys.argv[1]))[idx, 2]).max()))
@@ -140,11 +151,14 @@ def fit_uv(W, vt, F):
         keep = r < max(3 * np.median(r[keep]), 1e-4)
     vt = list(vt)
     new = {}
+    base = list(vt)
     for v in FREE:
         x, y = W[v, 0], W[v, 1]
-        new[v] = len(vt)
-        vt.append(np.array([1, x, y, x * x, x * y, y * y]) @ C)
-    F = [[(v, new.get(v, u)) for v, u in f] for f in F]
+        fit = np.array([1, x, y, x * x, x * y, y * y]) @ C
+        for u in uvs[v]:  # the weight blends the fit with the own UV of the vertex: no change at the brows
+            new[(v, u)] = len(vt)
+            vt.append(WEIGHT.get(v, 1.0) * fit + (1 - WEIGHT.get(v, 1.0)) * np.asarray(base[u]))
+    F = [[(v, new.get((v, u), u)) for v, u in f] for f in F]
     print('pit uv refitted: %d vertices from %d ring vertices, residual %.5f' % (len(FREE), int(keep.sum()), float(np.median(r[keep]))))
     return vt, F
 
