@@ -65,6 +65,8 @@ def check(p):
 
 
 def ask(p, prompt, image_b64=None):
+    """image_b64: one picture or a list of pictures (A, B ...)"""
+    imgs = [image_b64] if isinstance(image_b64, str) else image_b64
     """Ask the model of the profile; answers are cached by (model, prompt, picture)."""
     key = hashlib.sha1(json.dumps([p['model'], prompt, image_b64]).encode()).hexdigest()
     path = os.path.join(CACHE, key + '.json')
@@ -74,12 +76,11 @@ def ask(p, prompt, image_b64=None):
         log(f"ВНИМАНИЕ: профиль {p['name']} не локальный ({p['url']}), запрос с картинкой не отправлен")
         raise RuntimeError('external service blocked')
     if p['kind'] == 'ollama':
-        m = {'role': 'user', 'content': prompt, **({'images': [image_b64]} if image_b64 else {})}
+        m = {'role': 'user', 'content': prompt, **({'images': imgs} if imgs else {})}
         ans = http(p['url'].rstrip('/') + '/api/chat', {'model': p['model'], 'messages': [m], 'stream': False},
                    timeout=300)['message']['content']
     else:
-        c = [{'type': 'text', 'text': prompt}] + ([{'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + image_b64}}]
-                                                  if image_b64 else [])
+        c = [{'type': 'text', 'text': prompt}] + [{'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + i}} for i in imgs or []]
         ans = http(p['url'].rstrip('/') + '/chat/completions', {'model': p['model'], 'messages': [{'role': 'user', 'content': c}]},
                    {'Authorization': 'Bearer ' + p.get('key', '')}, 300)['choices'][0]['message']['content']
     os.makedirs(CACHE, exist_ok=True)

@@ -12,20 +12,7 @@ from PIL import Image
 from bake import read_uv_faces
 
 
-def main():
-    W = trimesh.load(sys.argv[1], process=False).vertices
-    vt, F = read_uv_faces(sys.argv[2])
-    tex = np.asarray(Image.open(sys.argv[3]).convert('RGB'))
-    S = tex.shape[0]
-    tri = np.array([[p[0] for p in f] for f in F])
-    uv = np.array([vt[[p[1] for p in f]].mean(0) for f in F])
-    col = tex[np.clip(((1 - uv[:, 1]) * S).astype(int), 0, S - 1), np.clip((uv[:, 0] * S).astype(int), 0, S - 1)] / 255.
-    E = None
-    import os
-    ep = sys.argv[1].replace('.obj', '_eyes.obj')
-    if os.path.exists(ep):
-        em = trimesh.load(ep, process=False)
-        E = (em.vertices, em.faces)
+def draw(W, tri, col, out, E=None):
     fig, ax = plt.subplots(1, 3, figsize=(15, 6))
     for a, yaw in zip(ax, (0, 40, 90)):
         r = np.radians(yaw)
@@ -42,7 +29,35 @@ def main():
         shade = 0.55 + 0.45 * np.abs(n[:, 2]) / (np.linalg.norm(n, axis=1) + 1e-12)
         a.add_collection(PolyCollection([V[tri[i]][:, :2] for i in order], facecolors=(col * shade[:, None])[order], edgecolors='none'))
         a.set_xlim(V[:, 0].min(), V[:, 0].max()); a.set_ylim(V[:, 1].min(), V[:, 1].max()); a.set_aspect('equal'); a.axis('off')
-    plt.tight_layout(); plt.savefig(sys.argv[4], dpi=70)
+    plt.tight_layout(); plt.savefig(out, dpi=70)
+    plt.close()
+
+
+def main():
+    import os
+    W = trimesh.load(sys.argv[1], process=False).vertices
+    vt, F = read_uv_faces(sys.argv[2])
+    tex = np.asarray(Image.open(sys.argv[3]).convert('RGB'))
+    S = tex.shape[0]
+    tri = np.array([[p[0] for p in f] for f in F])
+    uv = np.array([vt[[p[1] for p in f]].mean(0) for f in F])
+    col = tex[np.clip(((1 - uv[:, 1]) * S).astype(int), 0, S - 1), np.clip((uv[:, 0] * S).astype(int), 0, S - 1)] / 255.
+    ep = sys.argv[1].replace('.obj', '_eyes.obj')
+    E = None
+    if os.path.exists(ep):
+        em = trimesh.load(ep, process=False)
+        E = (em.vertices, em.faces)
+    draw(W, tri, col, sys.argv[4], E)
+
+
+def render_glb(path, out):
+    """the same preview of a textured glb (the generated head)"""
+    m = trimesh.load(path, force='mesh')
+    tex = np.asarray(m.visual.material.baseColorTexture.convert('RGB'))
+    H, Wd = tex.shape[:2]
+    uv = m.visual.uv[m.faces].mean(1)
+    col = tex[np.clip(((1 - uv[:, 1]) % 1 * H).astype(int), 0, H - 1), np.clip((uv[:, 0] % 1 * Wd).astype(int), 0, Wd - 1)] / 255.
+    draw(np.asarray(m.vertices), m.faces, col, out)
 
 
 if __name__ == '__main__':
