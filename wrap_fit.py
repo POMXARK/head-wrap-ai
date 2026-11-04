@@ -36,7 +36,10 @@ def free_weights(tpl_base, eyes_path='template/eyes.obj'):
     return np.where((r == 1) | (r == 2), 0., 1.)
 
 
-def nonrigid(target, tpl, weights=None, lm=None):
+FLAT = 0.8  # share of the eyelid bulge removed
+
+
+def nonrigid(target, tpl, weights=None, lm=None, lidmask=None):
     """steps: [stiffness, landmark weight, normal weight, iterations]; the stiffness falls, the template follows the target"""
     P = reg.nricp_amberg(tpl, target, steps=[[0.01, 10, 0.5, 10], [0.003, 5, 0.1, 10], [0.001, 2, 0.05, 10]],
                          eps=1e-4, gamma=1, distance_threshold=0.05,
@@ -59,6 +62,17 @@ def nonrigid(target, tpl, weights=None, lm=None):
             for i in np.where(free & ~pinned)[0]:
                 D[i] = D[nb[i]].mean(0)
         out.vertices = tpl.vertices + D
+        # the bulge of the template over the eyeball is flattened: z of the eyelid vertices goes to a heavy smoothing of z
+        # (the ring around the lids stays fixed), landmarks stay
+        lid = (lidmask if lidmask is not None else np.zeros(len(P), bool)) & ~pinned
+        if lid.any() and FLAT > 0:
+            z = out.vertices[:, 2].copy()
+            zs = z.copy()
+            idx = np.where(lid)[0]
+            for _ in range(200):
+                for i in idx:
+                    zs[i] = zs[nb[i]].mean()
+            out.vertices[idx, 2] = z[idx] + FLAT * (zs[idx] - z[idx])
     return out
 
 
@@ -76,7 +90,8 @@ def main():
             if n.startswith(('eye_', 'lid_')):
                 lm[1][i][2] = sim.vertices[lm[0][i]][2]
         print('landmarks', len(t))
-    out = nonrigid(tgt, sim, free_weights(tpl), lm)
+    lidmask = regions.classify(tpl.vertices, read_v('template/eyes.obj')) == 1
+    out = nonrigid(tgt, sim, free_weights(tpl), lm, lidmask)
     ev = read_v('template/eyes.obj')
     ne = ev @ M[:3, :3].T + M[:3, 3]
     for sgn in (1, -1):  # each eye follows the mean shift of the eyelid vertices around it
