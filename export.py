@@ -19,6 +19,8 @@ BROW_GAP = 99  # the pit is filled up to the top of the eye plus this of its hei
 FIT_MAX = 0.15  # largest UV distance a pit vertex may be moved by the refit (the islands of the atlas are further apart)
 PIT_RINGS = 6  # rings of vertices round the pit that are filled with it
 WEIGHT = {}  # the weight of the pit fill per vertex (1 at the eye, 0 up at the brows)
+PLATE_BLUR = 3.0
+PLATE = []  # (own UV, fitted UV) of the triangles whose vertices keep the cramped UV of the old socket (fit_uv): their texels are repainted (paint_plate)
 FREE = set()  # the vertices of the pits (smooth_pits): their UV is refitted from the skin round them (fit_uv)
 PIT_Z = 0.32  # vertices of the face behind this depth under the eye are the floor of the pit
 
@@ -165,18 +167,59 @@ def fit_uv(W, vt, F):
         keep = r < max(3 * np.median(r[keep]), 1e-4)
     vt = list(vt)
     new = {}
+    skipped = {}
     base = list(vt)
     for v in FREE:
         x, y = W[v, 0], W[v, 1]
         fit = np.array([1, x, y, x * x, x * y, y * y]) @ C
         for u in uvs[v]:  # the weight blends the fit with the own UV of the vertex: no change at the brows
             if np.linalg.norm(fit - np.asarray(base[u])) > FIT_MAX:
+                skipped[(v, u)] = fit
                 continue  # the vertex sits in another island (the old socket): the fit would stretch its faces across the atlas
             new[(v, u)] = len(vt)
             vt.append(WEIGHT.get(v, 1.0) * fit + (1 - WEIGHT.get(v, 1.0)) * np.asarray(base[u]))
+    PLATE.clear()
+    PLATE.extend((np.array([base[u] for _, u in f]), np.array([skipped[(v, u)] for v, u in f]))
+                 for f in F if all((v, u) in skipped for v, u in f))
     F = [[(v, new.get((v, u), u)) for v, u in f] for f in F]
     print('pit uv refitted: %d vertices from %d ring vertices, residual %.5f' % (len(FREE), int(keep.sum()), float(np.median(r[keep]))))
     return vt, F
+
+
+def paint_plate(img):
+    """The texels of the cramped socket UV (flat plates under the eyes) repainted with the skin the fit would show
+    there (ours): the triangle at its own UV gets the colours of the same triangle at its fitted UV."""
+    from PIL import ImageDraw
+    a = np.array(img.convert('RGB'))
+    S = a.shape[0]
+    out = a.copy()
+    done = np.zeros((S, S), bool)
+    n = 0
+    for own, fit in PLATE:
+        p = own * [S, -S] + [0, S]
+        q = fit * [S, -S] + [0, S]
+        m = Image.new('L', (S, S), 0)
+        ImageDraw.Draw(m).polygon([tuple(x) for x in p], fill=255)
+        ys, xs = np.nonzero(np.array(m))
+        if len(xs) == 0:
+            continue
+        A = np.array([[p[1, 0] - p[0, 0], p[2, 0] - p[0, 0]], [p[1, 1] - p[0, 1], p[2, 1] - p[0, 1]]])
+        if abs(np.linalg.det(A)) < 1e-9:
+            continue
+        b = np.linalg.solve(A, np.stack([xs + 0.5 - p[0, 0], ys + 0.5 - p[0, 1]]))
+        b = np.clip(b, 0, 1)
+        sx = q[0, 0] + b[0] * (q[1, 0] - q[0, 0]) + b[1] * (q[2, 0] - q[0, 0])
+        sy = q[0, 1] + b[0] * (q[1, 1] - q[0, 1]) + b[1] * (q[2, 1] - q[0, 1])
+        out[ys, xs] = a[np.clip(sy.astype(int), 0, S - 1), np.clip(sx.astype(int), 0, S - 1)]
+        done[ys, xs] = True
+        n += len(xs)
+    from scipy import ndimage as ndi
+    # the plate island has few texels: the magnified blocks are smoothed (a gradient, not squares)
+    w = ndi.gaussian_filter(done.astype(float), 1.5)[..., None]
+    blur = np.stack([ndi.gaussian_filter(out[..., c].astype(float), PLATE_BLUR) for c in range(3)], -1)
+    out = (out * (1 - w) + blur * w).astype(np.uint8)
+    print('plate texels repainted', n, 'triangles', len(PLATE))
+    return Image.fromarray(out)
 
 
 def obj_mesh(vpath, tpath, tex, polys=None, W=None):
@@ -191,6 +234,8 @@ def obj_mesh(vpath, tpath, tex, polys=None, W=None):
         print('slit: faces dropped', int(drop.sum()))
         under = None if os.environ.get('EYE_DBG') == 'nounder' else under_eye_mask(W, vt, F, drop, polys, tex)
         F = [f for f, d in zip(F, drop) if not d]
+        if PLATE and os.environ.get('EYE_DBG') != 'noplate':
+            under = paint_plate(under or Image.open(tex))
     pairs, idx, faces = {}, [], []
     for f in F:
         t = []
