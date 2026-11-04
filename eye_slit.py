@@ -17,7 +17,7 @@ sys.path.insert(0, '../corsairs-remake/tools')
 import pdm_project_views as pv  # noqa: E402
 
 RX, RY, RZ = 0.62, 0.95, 0.03  # semi-axes: of the opening width, of its height, absolute
-BALL_BACK = 0.026  # the pole stands RZ - BALL_BACK = 4 mm before the skin
+BALL_BACK = 0.012  # the pole stands RZ - BALL_BACK = 4 mm before the skin
 PAD = 1.25  # the opening is enlarged about its centre for the colours: the ball shows under the lid rim
 N_LON, N_LAT = 48, 24
 TEX = 256

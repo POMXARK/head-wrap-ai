@@ -55,7 +55,10 @@ def main():
             sc.add_geometry(m, node_name='eye_' + k)
     if '--ponytail' in a:
         i = a.index('--ponytail')
-        sc.add_geometry(obj_mesh(a[i + 1], a[i + 1], a[i + 2]), node_name='ponytail')
+        pm = obj_mesh(a[i + 1], a[i + 1], a[i + 2])
+        if pm.volume < 0:  # the tube was wound inside out: the engine culled its outside and showed its inside
+            pm.invert()
+        sc.add_geometry(pm, node_name='ponytail')
     sc.export(a[3])
     g = trimesh.load(a[3])
     print('exported', a[3], {k: (len(v.vertices), len(v.faces)) for k, v in g.geometry.items()})
