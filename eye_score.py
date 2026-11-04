@@ -102,7 +102,13 @@ def score(glb, polys, png=None):
         c = p.mean(0)
         w, h = np.ptp(p[:, 0]), np.ptp(p[:, 1])
         box = (c[0] - 1.3 * w, c[0] + 1.3 * w, c[1] - 3.5 * h, c[1] + 2.0 * h)
+        sel = (np.abs(patch[0][:, 0] - c[0]) < w) & (np.abs(patch[0][:, 1] - c[1]) < h)
+        cz = float(patch[0][sel][:, 2].mean()) if sel.any() else 0.0
         for yaw in (0, -25, 25):
+            # the box follows the eye when the head turns (x' = x cos + z sin)
+            a = np.radians(yaw)
+            dx = (c[0] * np.cos(a) + cz * np.sin(a)) - c[0]
+            box = (c[0] - 1.3 * w + dx, c[0] + 1.3 * w + dx, c[1] - 3.5 * h, c[1] + 2.0 * h)
             parts = [(*head, 0), (*patch, 1)]
             zb, idb, nb, col = render(parts, box, yaw)
             pz, pid, _, _ = render([(*patch, 1)], box, yaw)[0:2] + (None, None)
@@ -113,7 +119,21 @@ def score(glb, polys, png=None):
             hole = eye_all & (idb == -1)
             m['through'] = float(hole.sum() / max(eye_all.sum(), 1))
             ys, xs = np.where(eye_vis)
-            m['aperture'] = float((np.ptp(ys) + 1) / (np.ptp(xs) + 1)) if len(ys) > 10 else 0.0
+            # the box holds both eyes at an angle: only the eye of this box (the largest blob) is measured; an eye
+            # mostly hidden by the nose (< 50 % of its blob visible) is not measured (nan = not applicable)
+            from scipy import ndimage as ndi
+            lab, n = ndi.label(ndi.binary_dilation(eye_vis, iterations=3))
+            if n:
+                big = lab == (1 + int(np.argmax(ndi.sum(eye_vis, lab, range(1, n + 1)))))
+                vis_b = eye_vis & big
+                lab2, n2 = ndi.label(ndi.binary_dilation(eye_all, iterations=3))
+                full_b = eye_all & (lab2 == lab2[vis_b][0])
+                ys, xs = np.where(vis_b)
+                m['aperture'] = float((np.ptp(ys) + 1) / (np.ptp(xs) + 1)) if len(ys) > 10 else 0.0
+                if vis_b.sum() < 0.5 * full_b.sum():
+                    m['aperture'] = float('nan')
+            else:
+                m['aperture'] = 0.0
             cc = col[eye_vis]
             m['picture'] = float((np.linalg.norm(cc - skin, axis=1) > 40).mean()) if len(cc) else 0.0
             m['iris'] = float((cc.mean(1) < 70).mean()) if len(cc) else 0.0
@@ -122,8 +142,10 @@ def score(glb, polys, png=None):
             ybot = ys_.max() if len(ys_) else int((box[3] - c[1]) / RES)
             zone = np.zeros_like(eye_all)
             zone[ybot + int(0.2 * h / RES):int((box[3] - c[1] + 2.8 * h) / RES),
-                 int((c[0] - 0.55 * w - box[0]) / RES):int((c[0] + 0.55 * w - box[0]) / RES)] = True
+                 int((0.75 * w) / RES):int((1.85 * w) / RES)] = True
             zone &= (idb == 0)
+            if eye_all.any():  # the nose or the silhouette beside the cheek is not the cheek: depth near the eye only
+                zone &= np.abs(zb - np.median(pz[eye_all])) < 0.07
             m['back'] = int((nb[zone][:, 2] < 0.05).sum())
             dzy = np.abs(np.diff(zb, axis=0))[:, :-1]
             dzx = np.abs(np.diff(zb, axis=1))[:-1, :]
@@ -139,6 +161,9 @@ def score(glb, polys, png=None):
             # pixels of the face with nothing drawn (a hole in the head) beside the eye
             from scipy import ndimage as ndi
             gap = (idb == -1) & ~ndi.binary_dilation(eye_all, iterations=6)
+            # only holes inside the head: skin on both sides in the row (the silhouette of a turned head is not a hole)
+            sk = idb == 0
+            gap &= np.maximum.accumulate(sk, axis=1) & np.maximum.accumulate(sk[:, ::-1], axis=1)[:, ::-1]
             gap[:, :4] = gap[:, -4:] = gap[:4] = gap[-4:] = False
             m['gaps'] = int(gap.sum())
             # blocky texture: the texels of the skin under the eye must not be magnified (texels per pixel of the render)
@@ -156,7 +181,7 @@ def score(glb, polys, png=None):
 def check(m):
     t = THRESH
     return {'visible': m['visible'] >= t['visible'], 'through': m['through'] <= t['through'],
-            'aperture': t['aperture'][0] <= m['aperture'] <= t['aperture'][1], 'picture': m['picture'] >= t['picture'],
+            'aperture': bool(np.isnan(m['aperture'])) or t['aperture'][0] <= m['aperture'] <= t['aperture'][1], 'picture': m['picture'] >= t['picture'],
             'back': m['back'] <= t['back'], 'step': m['step'] <= t['step'], 'shade': m['shade'] <= t['shade'],
             'depth': m['depth'] <= t['depth'], 'gaps': m['gaps'] <= t['gaps'], 'blocky': m['blocky'] <= t['blocky']}
 
