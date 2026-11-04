@@ -5,6 +5,7 @@ The eyes are not touched here (rigid move with the head frame is done by the cal
 import sys
 import numpy as np
 import trimesh
+from bake import read_mesh, read_v, write_v
 from trimesh import registration as reg
 
 
@@ -28,7 +29,7 @@ def fit(target, tpl, iters=30):
 def free_weights(tpl_base, eyes_path='template/eyes.obj', r_eye=0.55):
     """vertex weights of the template (base units, before the similarity move): 0 = not pulled to the target, only the
     stiffness moves the vertex with its neighbours (eyelids, ears: the target has a pit and a flat leaf there)"""
-    ev = trimesh.load(eyes_path, process=False).vertices
+    ev = read_v(eyes_path)
     c = [ev[ev[:, 0] > 0].mean(0), ev[ev[:, 0] < 0].mean(0)]
     V = tpl_base.vertices
     w = np.ones(len(V))
@@ -61,23 +62,21 @@ def nonrigid(target, tpl, weights=None):
 
 def main():
     tgt = load_target(sys.argv[1])
-    tpl = trimesh.load(sys.argv[2], process=False)
+    tpl = read_mesh(sys.argv[2])
     out, M, cost = fit(tgt, tpl)
     print('similarity icp cost', cost, 'scale', np.cbrt(abs(np.linalg.det(M[:3, :3]))))
     sim = out
     out = nonrigid(tgt, sim, free_weights(tpl))
-    eyes = trimesh.load('template/eyes.obj', process=False)
-    ev = eyes.vertices
-    eyes.apply_transform(M)
+    ev = read_v('template/eyes.obj')
+    ne = ev @ M[:3, :3].T + M[:3, 3]
     for sgn in (1, -1):  # each eye follows the mean shift of the eyelid vertices around it
-        c = ev[sgn * ev[:, 0] > 0].mean(0)
-        near = np.linalg.norm(tpl.vertices - c, axis=1) < 0.55
         side = sgn * ev[:, 0] > 0
-        eyes.vertices[side] += (out.vertices[near] - sim.vertices[near]).mean(0)
-    eyes.export(sys.argv[3].replace('.obj', '_eyes.obj'))
+        near = np.linalg.norm(tpl.vertices - ev[side].mean(0), axis=1) < 0.55
+        ne[side] += (out.vertices[near] - sim.vertices[near]).mean(0)
+    write_v('template/eyes.obj', sys.argv[3].replace('.obj', '_eyes.obj'), ne)
     d = tgt.nearest.on_surface(out.vertices)[1]
     print('distance to target: mean %.4f max %.4f, >3%% of head: %d vertices' % (d.mean(), d.max(), (d.size and (d > 0.03).sum())))
-    out.export(sys.argv[3])
+    write_v(sys.argv[2], sys.argv[3], out.vertices)
 
 
 if __name__ == '__main__':

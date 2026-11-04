@@ -9,7 +9,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 from PIL import Image
-from bake import read_uv_faces
+from bake import read_uv_faces, read_v
 
 
 def draw(W, tri, col, out, E=None):
@@ -35,7 +35,7 @@ def draw(W, tri, col, out, E=None):
 
 def main():
     import os
-    W = trimesh.load(sys.argv[1], process=False).vertices
+    W = read_v(sys.argv[1])
     vt, F = read_uv_faces(sys.argv[2])
     tex = np.asarray(Image.open(sys.argv[3]).convert('RGB'))
     S = tex.shape[0]
@@ -45,7 +45,8 @@ def main():
     ep = sys.argv[1].replace('.obj', '_eyes.obj')
     E = None
     if os.path.exists(ep):
-        em = trimesh.load(ep, process=False)
+        from bake import read_mesh
+        em = read_mesh(ep)
         E = (em.vertices, em.faces)
     draw(W, tri, col, sys.argv[4], E)
 

@@ -25,6 +25,25 @@ def read_uv_faces(path):
     return np.array(vt), F
 
 
+def read_v(path):
+    """vertices in the order of the v lines (trimesh splits vertices by (v, vt) pairs and reorders them)"""
+    return np.array([list(map(float, l.split()[1:4])) for l in open(path) if l.startswith('v ')])
+
+
+def read_mesh(path):
+    """trimesh.Trimesh with the v index order of the file (no UV)"""
+    _, F = read_uv_faces(path)
+    return trimesh.Trimesh(read_v(path), np.array([[p[0] for p in f] for f in F]), process=False)
+
+
+def write_v(template, out, V):
+    """copy of the template obj with new v lines (UV and faces kept)"""
+    it = iter(V)
+    with open(out, 'w') as o:
+        for l in open(template):
+            o.write('v %.5f %.5f %.5f\n' % tuple(next(it)) if l.startswith('v ') else l)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('target')
@@ -36,7 +55,7 @@ def main():
     tgt = trimesh.load(a.target, force='mesh')
     tex = np.asarray(tgt.visual.material.baseColorTexture.convert('RGB'))
     tuv = tgt.visual.uv
-    W = trimesh.load(a.wrapped, process=False).vertices
+    W = read_v(a.wrapped)
     vt, F = read_uv_faces(a.template)
     S = a.size
     img = np.zeros((S, S, 3), np.uint8)
