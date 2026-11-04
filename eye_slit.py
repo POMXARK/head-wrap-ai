@@ -23,8 +23,8 @@ N_LON, N_LAT = 48, 24
 TEX = 256
 
 
-LOW = 0.55  # the lower half of the slit is this much of the opening
-SHRINK = (0.97, 0.8)  # the slit is a little smaller than the opening read from the view: the lid rim covers its edge
+LOW = 0.8  # the lower half of the slit is this much of the opening
+SHRINK = (0.97, 0.9)  # the slit is a little smaller than the opening read from the view: the lid rim covers its edge
 
 
 def look_ahead(out, okm):
@@ -71,6 +71,33 @@ def drop_mask(W, F, polys):
             c = W[[q[0] for q in f]].mean(0)
             if c[2] > 0.25 and path.contains_point(c[:2]):
                 drop[i] = True
+    return fill_islands(F, drop)
+
+
+def fill_islands(F, drop):
+    """Kept faces with two or more dropped neighbours (islands and notches of the cut) are dropped too: the hole is one
+    simple loop, no scrap of the head stands in front of the patch."""
+    ef = {}
+    for i, f in enumerate(F):
+        ids = [p[0] for p in f]
+        for a, b in zip(ids, ids[1:] + ids[:1]):
+            ef.setdefault((min(a, b), max(a, b)), []).append(i)
+    drop = drop.copy()
+    for _ in range(20):
+        ch = False
+        for i in np.where(drop)[0]:  # only around the dropped faces
+            ids = [p[0] for p in F[i]]
+            for a, b in zip(ids, ids[1:] + ids[:1]):
+                for j in ef[(min(a, b), max(a, b))]:
+                    if drop[j]:
+                        continue
+                    jd = [p[0] for p in F[j]]
+                    n = sum(drop[k] for x, y in zip(jd, jd[1:] + jd[:1]) for k in ef[(min(x, y), max(x, y))] if k != j)
+                    if n >= 2:
+                        drop[j] = True
+                        ch = True
+        if not ch:
+            break
     return drop
 
 

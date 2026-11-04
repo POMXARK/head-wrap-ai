@@ -137,24 +137,39 @@ def patches(W, F, drop, polys, view, lo, hi, head=None):
         loop = [l for l in loops if np.linalg.norm(W[l][:, :2].mean(0) - c) < 0.5 * np.ptp(P0[:, 0])]
         if not loop:
             raise SystemExit(f'eye_patch: no hole around the eye {k}')
-        loop = max(loop, key=lambda l: np.ptp(W[l][:, 0]))  # the outer loop: islands of kept faces in a wide hole make small ones
-        L = W[loop]
+        # the outer loops: those not inside a wider one (the stacked layers of the pit and the islands give inner loops);
+        # a hole of two separate pieces gets a patch on each
+        loop.sort(key=lambda l: -np.ptp(W[l][:, 0]))
+        outer = []
+        for l in loop:
+            if not any(Path(W[o][:, :2]).contains_point(W[l][:, :2].mean(0)) for o in outer):
+                outer.append(l)
         scale = WINDOW_W / np.ptp(P0[:, 0])  # texels per head unit
         cu, cv = CENTRE[k]
         to_uv = lambda xy: np.c_[cu + (xy[:, 0] - c[0]) * scale, cv - (xy[:, 1] - c[1]) * scale]
-        pts, tri, z = fill_patch(L[:, :2], L[:, 2], scale)
+        parts = []
+        for loop in outer:
+            L = W[loop]
+            pts, tri, z = fill_patch(L[:, :2], L[:, 2], scale)
+            # the normals of the patch: those of the rim vertices carried over the inside (a flat patch lit its own way:
+            # the pink circles under the eyes)
+            ln = hn[loop].copy()
+            ln[ln[:, 2] < 0] *= -1  # the faces of the pit were folded by the wrap: their normals look inside
+            nn = np.vstack([ln, np.zeros((len(pts) - len(loop), 3))])
+            gi = np.arange(len(loop), len(pts))
+            for ax in range(3):
+                v = LinearNDInterpolator(L[:, :2], ln[:, ax])(pts[gi])
+                bad = np.isnan(v)
+                v[bad] = NearestNDInterpolator(L[:, :2], ln[:, ax])(pts[gi][bad])
+                nn[gi, ax] = v
+            nn /= np.maximum(np.linalg.norm(nn, axis=1, keepdims=True), 1e-9)
+            parts.append((pts, tri, z, nn))
+        off = np.cumsum([0] + [len(p[0]) for p in parts])
+        pts = np.vstack([p[0] for p in parts])
+        tri = np.vstack([p[1] + o for p, o in zip(parts, off)])
+        z = np.concatenate([p[2] for p in parts])
+        nn = np.vstack([p[3] for p in parts])
         uv = to_uv(pts)
-        # the normals of the patch: those of the rim vertices carried over the inside (a flat patch lit its own way:
-        # the pink circles under the eyes)
-        ln = hn[loop]
-        nn = np.vstack([ln, np.zeros((len(pts) - len(loop), 3))])
-        gi = np.arange(len(loop), len(pts))
-        for ax in range(3):
-            v = LinearNDInterpolator(L[:, :2], ln[:, ax])(pts[gi])
-            bad = np.isnan(v)
-            v[bad] = NearestNDInterpolator(L[:, :2], ln[:, ax])(pts[gi][bad])
-            nn[gi, ax] = v
-        nn /= np.maximum(np.linalg.norm(nn, axis=1, keepdims=True), 1e-9)
         norms.append(nn)
         windows[k] = [float(uv[:, 0].min() - PAD), float(uv[:, 0].max() + PAD), float(uv[:, 1].min() - PAD),
                       float(uv[:, 1].max() + PAD)]
