@@ -64,7 +64,17 @@ def main():
     tpl = trimesh.load(sys.argv[2], process=False)
     out, M, cost = fit(tgt, tpl)
     print('similarity icp cost', cost, 'scale', np.cbrt(abs(np.linalg.det(M[:3, :3]))))
-    out = nonrigid(tgt, out, free_weights(tpl))
+    sim = out
+    out = nonrigid(tgt, sim, free_weights(tpl))
+    eyes = trimesh.load('template/eyes.obj', process=False)
+    ev = eyes.vertices
+    eyes.apply_transform(M)
+    for sgn in (1, -1):  # each eye follows the mean shift of the eyelid vertices around it
+        c = ev[sgn * ev[:, 0] > 0].mean(0)
+        near = np.linalg.norm(tpl.vertices - c, axis=1) < 0.55
+        side = sgn * ev[:, 0] > 0
+        eyes.vertices[side] += (out.vertices[near] - sim.vertices[near]).mean(0)
+    eyes.export(sys.argv[3].replace('.obj', '_eyes.obj'))
     d = tgt.nearest.on_surface(out.vertices)[1]
     print('distance to target: mean %.4f max %.4f, >3%% of head: %d vertices' % (d.mean(), d.max(), (d.size and (d > 0.03).sum())))
     out.export(sys.argv[3])

@@ -20,11 +20,21 @@ def main():
     tri = np.array([[p[0] for p in f] for f in F])
     uv = np.array([vt[[p[1] for p in f]].mean(0) for f in F])
     col = tex[np.clip(((1 - uv[:, 1]) * S).astype(int), 0, S - 1), np.clip((uv[:, 0] * S).astype(int), 0, S - 1)] / 255.
+    E = None
+    import os
+    ep = sys.argv[1].replace('.obj', '_eyes.obj')
+    if os.path.exists(ep):
+        em = trimesh.load(ep, process=False)
+        E = (em.vertices, em.faces)
     fig, ax = plt.subplots(1, 3, figsize=(15, 6))
     for a, yaw in zip(ax, (0, 40, 90)):
         r = np.radians(yaw)
         R = np.array([[np.cos(r), 0, np.sin(r)], [0, 1, 0], [-np.sin(r), 0, np.cos(r)]])
         V = W @ R.T
+        if E is not None:  # eyeballs: white, painted before the head only where the head does not cover them
+            VE = E[0] @ R.T
+            ne = np.cross(VE[E[1][:, 1]] - VE[E[1][:, 0]], VE[E[1][:, 2]] - VE[E[1][:, 0]])
+            a.add_collection(PolyCollection([VE[f][:, :2] for f, k in zip(E[1], ne[:, 2]) if k > 0], facecolors='#e8e2d8', edgecolors='none', zorder=0))
         n = np.cross(V[tri[:, 1]] - V[tri[:, 0]], V[tri[:, 2]] - V[tri[:, 0]])
         vis = n[:, 2] > 0
         z = V[tri].mean(1)[:, 2]
