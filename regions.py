@@ -10,7 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from bake import read_v, read_uv_faces
 
-EYE_R = 0.3  # eyelid radius around the eyeball centre (the eyeball itself has r ~0.15)
+EYE_R = 0.2  # eyelid radius around the eyeball centre (the eyeball itself has r ~0.15)
 NAMES = ['face', 'eyelid', 'ear', 'neck', 'scalp', 'lips', 'nose']
 COL = ['#d9b08c', '#3366cc', '#cc3333', '#33aa55', '#222222', '#ff66aa', '#ffcc33']
 

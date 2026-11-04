@@ -12,9 +12,10 @@ from PIL import Image
 from bake import read_uv_faces, read_v
 
 
-def draw(W, tri, col, out, E=None):
-    fig, ax = plt.subplots(1, 3, figsize=(15, 6))
-    for a, yaw in zip(ax, (0, 40, 90)):
+def draw(W, tri, col, out, E=None, crop=None, yaws=(0, 40, 90)):
+    fig, ax = plt.subplots(1, len(yaws), figsize=(5 * len(yaws), 6))
+    ax = np.atleast_1d(ax)
+    for a, yaw in zip(ax, yaws):
         r = np.radians(yaw)
         R = np.array([[np.cos(r), 0, np.sin(r)], [0, 1, 0], [-np.sin(r), 0, np.cos(r)]])
         V = W @ R.T
@@ -26,9 +27,10 @@ def draw(W, tri, col, out, E=None):
         vis = n[:, 2] > 0
         z = V[tri].mean(1)[:, 2]
         order = [i for i in np.argsort(z) if vis[i]]
-        shade = 0.55 + 0.45 * np.abs(n[:, 2]) / (np.linalg.norm(n, axis=1) + 1e-12)
+        nn = n / (np.linalg.norm(n, axis=1, keepdims=True) + 1e-12)
+        shade = 0.45 + 0.55 * np.clip(nn @ np.array([-0.35, 0.5, 0.8]), 0, 1)  # one light from the upper left front: relief is visible
         a.add_collection(PolyCollection([V[tri[i]][:, :2] for i in order], facecolors=(col * shade[:, None])[order], edgecolors='none'))
-        a.set_xlim(V[:, 0].min(), V[:, 0].max()); a.set_ylim(V[:, 1].min(), V[:, 1].max()); a.set_aspect('equal'); a.axis('off')
+        a.set_xlim(*(crop[0] if crop else (V[:, 0].min(), V[:, 0].max()))); a.set_ylim(*(crop[1] if crop else (V[:, 1].min(), V[:, 1].max()))); a.set_aspect('equal'); a.axis('off')
     plt.tight_layout(); plt.savefig(out, dpi=70)
     plt.close()
 
