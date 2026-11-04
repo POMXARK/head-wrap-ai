@@ -52,6 +52,7 @@ def write_v(template, out, V):
 CAM = {'front': (0, 0, 1), 'left': (1, 0, 0), 'back': (0, 0, -1), 'right': (-1, 0, 0)}  # towards the camera, as pdm_project_views.project
 
 
+BACK_Z, BACK_BRIGHT = -0.15, 115  # the scalp behind z = -0.15; brighter than this (0..255) is not hair
 HAIR_V = 0.30  # a view pixel darker than this is hair (max of RGB / 255)
 SKIN_ON_HAIR = 0.1  # weight left to a pixel of the wrong class
 
@@ -188,6 +189,12 @@ def main():
     cov[row, np.clip(px[:, 0], 0, S - 1)] = True
     if a.views:
         col = from_views(a.views, tgt, W, F, P, N, col, far=dist > FAR, lab=lab, names=rj['names'])
+        # the back of the scalp is hair: a bright texel there (nape, no view sees it) takes the median hair colour (ours)
+        back = (lab == rj['names'].index('scalp')) & (P[:, 2] < BACK_Z)
+        bright = back & (col.max(1) > BACK_BRIGHT)
+        if bright.any() and (back & ~bright).any():
+            col[bright] = np.median(col[back & ~bright], axis=0).astype(np.uint8)
+            print('back scalp texels recoloured as hair:', int(bright.sum()))
         img[row, np.clip(px[:, 0], 0, S - 1)] = col
     Image.fromarray(img).save(a.out)
     print('texels', int(cov.sum()), 'of', S * S, '->', a.out)
