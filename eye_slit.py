@@ -23,6 +23,7 @@ N_LON, N_LAT = 48, 24
 TEX = 256
 
 
+LOW = 0.55  # the lower half of the slit is this much of the opening
 SHRINK = (0.97, 0.8)  # the slit is a little smaller than the opening read from the view: the lid rim covers its edge
 
 
@@ -43,7 +44,10 @@ def drop_mask(W, F, polys):
     for p in polys.values():
         p = np.array(p)
         c = p.mean(0)
-        path = Path(c + (p - c) * SHRINK)
+        q = c + (p - c) * SHRINK
+        low = q[:, 1] < c[1]
+        q[low, 1] = c[1] + (q[low, 1] - c[1]) * LOW  # the lower lid: the ball under it showed as a grey band from below
+        path = Path(q)
         for i, f in enumerate(F):
             c = W[[q[0] for q in f]].mean(0)
             if c[2] > 0.25 and path.contains_point(c[:2]):
