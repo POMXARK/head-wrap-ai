@@ -85,6 +85,8 @@ def from_views(paths, tgt, W, F, P, N, col, size=1024, base=0.15, eps=0.03, far=
         w = (np.clip((cosv - 0.5) / 0.35, 0, 1) ** 3 * vis * inner[qy, qx]).astype(np.float32)
         if far is not None and name == 'front':  # eyelid texels (the target has a pit): the front view even at a grazing angle
             w[far] = np.maximum(w[far], (np.clip((cosv[far] - 0.25) / 0.3, 0, 1) * vis[far] * inner[qy, qx][far]).astype(np.float32))
+        if far is not None and name != 'front':  # eyelids come from the front view only
+            w[far] = 0
         acc += f[qy, qx] * w[:, None]
         wsum += w
         print(f'{name}: texels with weight > 0.5: {int((w > 0.5).sum())}')
