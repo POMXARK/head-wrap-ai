@@ -36,7 +36,7 @@ def free_weights(tpl_base, eyes_path='template/eyes.obj'):
     return np.where((r == 1) | (r == 2), 0., 1.)
 
 
-FLAT = 0.8  # share of the eyelid bulge removed
+FLAT = 1.0  # share of the eyelid bulge removed
 
 
 def nonrigid(target, tpl, weights=None, lm=None, lidmask=None):
