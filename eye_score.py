@@ -150,14 +150,22 @@ def score(glb, polys, png=None):
             dzy = np.abs(np.diff(zb, axis=0))[:, :-1]
             dzx = np.abs(np.diff(zb, axis=1))[:-1, :]
             dz = np.maximum(dzy, dzx)
-            ok = zone[:-1, :-1] & zone[1:, 1:] & (zb[:-1, :-1] > -8)
+            from scipy import ndimage as ndi
+            zin = ndi.binary_erosion(zone, iterations=8)  # the edge of the zone is the nose or the silhouette: an occlusion, not a fold
+            ok = zin[:-1, :-1] & zin[1:, 1:] & (zb[:-1, :-1] > -8)
             m['step'] = float(dz[ok].max()) if ok.any() else 0.0
             lit = col * (0.35 + 0.65 * np.clip(nb @ LIGHT, 0, 1))[..., None]
             L = lit.mean(2)
             gl = np.maximum(np.abs(np.diff(L, axis=0))[:, :-1], np.abs(np.diff(L, axis=1))[:-1, :])
             m['shade'] = float(np.percentile(gl[ok], 99.5)) if ok.any() else 0.0
             zz = zb[zone]
-            m['depth'] = float(np.percentile(zz, 98) - np.percentile(zz, 2)) if len(zz) else 0.0
+            if len(zz) > 20:  # a dish, not a tilted cheek: the plane of the zone is taken out before the range
+                yy, xx = np.nonzero(zone)
+                A = np.stack([np.ones(len(xx)), xx * RES, yy * RES], 1)
+                resid = zz - A @ np.linalg.lstsq(A, zz, rcond=None)[0]
+                m['depth'] = float(np.percentile(resid, 98) - np.percentile(resid, 2))
+            else:
+                m['depth'] = 0.0
             # pixels of the face with nothing drawn (a hole in the head) beside the eye
             from scipy import ndimage as ndi
             gap = (idb == -1) & ~ndi.binary_dilation(eye_all, iterations=6)
