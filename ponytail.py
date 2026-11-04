@@ -79,7 +79,7 @@ def hair_texture(P, size=512, seed=1):
     return img.astype(np.uint8)
 
 
-def build(P, out_obj, out_png, scale=0.65):
+def build(P, out_obj, out_png, scale=0.85):
     from PIL import Image
     S = spine(P)
     S[:, 3:] *= scale
