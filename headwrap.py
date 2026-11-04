@@ -77,6 +77,10 @@ def build():
     r = subprocess.run([sys.executable, 'eye_score.py', w('hero1_eye.glb'), w('eye_open.json')], cwd=HERE)
     if r.returncode:
         print('WARNING: eye_score reports failed checks (see the table above)')
+    # the whole head surface: shards and stretched texture (mesh_score.py), a picture of the flagged triangles
+    r = subprocess.run([sys.executable, 'mesh_score.py', w('hero1_eye.glb'), '--png', w('mesh_score.png')], cwd=HERE)
+    if r.returncode:
+        print('WARNING: mesh_score reports failed checks (see work/mesh_score.png)')
 
 
 def game(model):
