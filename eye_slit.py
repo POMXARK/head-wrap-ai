@@ -39,6 +39,25 @@ def look_ahead(out, okm):
     return np.roll(np.roll(out, dx, axis=1), dy, axis=0)
 
 
+def lower_sclera(out, okm):
+    """Below the iris the Qwen view shows the grey wet line of the lower lid and the nearest-colour fill smears it into
+    radial streaks: that part is one sclera colour (median of the bright texels of the opening) fading to 0.85 at the bottom."""
+    from scipy import ndimage as ndi
+    ys, xs = np.where(okm)
+    L = out.max(2)
+    dark = okm & (L <= np.percentile(L[okm], 30))
+    iris_bot = np.percentile(np.where(dark)[0], 99) + 3
+    row = np.arange(okm.shape[0])[:, None] <= iris_bot
+    br = okm & row & (L >= np.percentile(L[okm & row], 92))  # the sclera beside the iris, above the lower lid
+    sc = np.median(out[br], 0) * np.array([1.04, 1.0, 0.95])
+    bot = ys.max()
+    rows = np.arange(okm.shape[0])[:, None]
+    t = np.clip((rows - iris_bot) / max(bot - iris_bot, 1), 0, 1)  # 0 at the iris, 1 at the lid
+    wgt = ndi.gaussian_filter(np.clip(t * 6, 0, 1), 1.5)[..., None]
+    shade = (1 - 0.08 * t)[..., None]
+    return out * (1 - wgt) + sc * shade * wgt
+
+
 def drop_mask(W, F, polys):
     drop = np.zeros(len(F), bool)
     for p in polys.values():
@@ -111,6 +130,7 @@ def eyeball(poly, W, view, lo, hi):
     from scipy import ndimage as ndi
     iy, ix = ndi.distance_transform_edt(~okm, return_distances=False, return_indices=True)
     out = out[iy, ix]
+    out = lower_sclera(out, okm)
     out = look_ahead(out, okm)
     tex = Image.fromarray(out.clip(0, 255).astype(np.uint8))
     faces = []
