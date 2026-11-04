@@ -15,5 +15,10 @@
 - **Skills Claude** — `.claude/skills/head-wrap` (запуск и порядок) и `head-wrap-check` (кадры, живая игра, каталог дефектов); копии лежат и в `remake/.claude/skills`.
 - **Плагин Blender (решение)**: не отдельная программа, а тонкая панель, которая вызывает `headwrap.py` через subprocess и открывает результат во вьюпорте; логики в нём нет, чтобы не было двух версий. Пока не написан (в этой среде нет Blender для проверки).
 
+## Два режима
+- **Голова** — `headwrap.py` (конвейер) и `session.py` (сравнение вариантов «лучше/хуже»: история, обучаемый оценщик, выбор части `--region ear` или мышью; страница `/review`).
+- **Модель** — `model.py` (части любой GLB, импорт, замена, добавление, удаление; страница `/model`). Дальше — сборка из каталога частей в духе Asset Forge (см. docs/plan.md).
+- Сервер: `python3 app.py` → http://127.0.0.1:8770
+
 ## Файлы конвейера
 `wrap_fit.py` (обтяжка) → `bake.py` (запекание) → `colormatch.py` → `cleanneck.py` → `padedge.py` → `lama_seam.py` / `lama_patch.py` → `export.py` (+ `eye_slit.py`, `ponytail.py`) → игра (`pdm_glb2gm.py`). Инструменты на один раз: `lama_uvseam.py`, `smooth_strip.py` (тупики, см. docs/plan.md).

@@ -7,10 +7,12 @@ AI answers. Only 127.0.0.1 is served. Pictures never leave the machines of the u
 """
 import argparse
 import hashlib
+import glob
 import json
 import os
 import threading
 import time
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -92,7 +94,7 @@ PAGE = """<!doctype html><meta charset=utf-8><title>head-wrap-ai</title>
 <style>body{font:14px sans-serif;margin:20px;max-width:900px}pre{background:#111;color:#ccc;padding:8px;height:220px;overflow:auto}
 input,select{margin:2px}.ok{color:#080}.bad{color:#b00}</style>
 <h2>head-wrap-ai</h2><p>Этап 0: профили моделей. Остальные этапы — <code>docs/plan.md</code>.</p>
-<h3>Профили моделей</h3><div id=pr></div><button onclick=add()>+ профиль</button> <button onclick=sv()>Сохранить</button>
+<p><a href="/model"><b>Модель: части, импорт, замена</b></a> &nbsp; <a href="/review"><b>Сравнение вариантов (лучше/хуже)</b></a></p><h3>Профили моделей</h3><div id=pr></div><button onclick=add()>+ профиль</button> <button onclick=sv()>Сохранить</button>
 <h3>Журнал</h3><pre id=lg></pre>
 <script>
 let C={};const $=i=>document.getElementById(i);
@@ -108,6 +110,57 @@ async function sv(){await fetch('/api/config',{method:'POST',body:JSON.stringify
 async function chk(i){await sv();const r=await (await fetch('/api/check?i='+i)).json();
 $('r'+i).className=r.ok?'ok':'bad';$('r'+i).textContent=r.ok?('ок: '+r.models.join(', ')):r.error}
 setInterval(async()=>{$('lg').textContent=(await (await fetch('/api/log')).json()).join('\\n')},2000);init()
+</script>"""
+
+
+REVIEW = """<!doctype html><meta charset=utf-8><title>review</title>
+<style>body{font:14px sans-serif;margin:16px;max-width:1300px}img{max-width:100%;border:2px solid #888}.row{display:flex;gap:12px}
+.row>div{flex:1;text-align:center}button{font-size:15px;padding:8px 14px;margin:4px}.h{color:#666;font-size:12px}
+.done{opacity:.55}</style><a href="/">&larr; head-wrap-ai</a>
+<h2>Сравнение вариантов</h2><div id=st class=h></div><div id=foc class=h></div><div id=cur></div><h3>История</h3><div id=hist></div>
+<script>
+const $=i=>document.getElementById(i);const img=(p,b)=>'/api/img?p='+encodeURIComponent(p)+(b?'&box='+b:'');
+async function sf(box,name){await fetch('/api/focus',{method:'POST',body:JSON.stringify({box,name})});load()}
+async function load(){const r=await (await fetch('/api/pairs')).json(),P=r.pairs,s=r.stats;
+$('st').textContent=`пар: ${s.pairs}, ждут: ${s.pending}, ваших выборов: ${s.voted}, решил оценщик: ${s.auto}; оценщик учится на ${s.evaluator_votes} выборах, точность на них ${s.evaluator_acc==null?'—':Math.round(s.evaluator_acc*100)+'%'}`;
+const f=r.focus;$('foc').innerHTML='Область работы: '+(f?`<b>${f.name||''}</b> [${f.box}] <button onclick="sf(null)">снять</button>`:'вся картинка')+' — выделите мышью на картинке A/B/до, чтобы сузить';
+const q=P.filter(p=>p.status=='pending')[0];
+$('cur').innerHTML=q?`<h3>#${q.id} ${q.problem}: ${q.question}</h3>${q.pred_a!=null?`<div class=h>оценщик думает: A лучше с вероятностью ${Math.round(q.pred_a*100)}%</div>`:''}
+<div class=row>${q.base?`<div>до<br><img class=sel src="${img(q.base)}"></div>`:''}<div><b>A</b> ${q.a.label}<br><img class=sel src="${img(q.a.img,q.box)}" data-full="${img(q.a.img)}"></div><div><b>B</b> ${q.b.label}<br><img class=sel src="${img(q.b.img,q.box)}"></div></div>
+<p><button onclick="v(${q.id},'a')">A лучше</button><button onclick="v(${q.id},'b')">B лучше</button><button onclick="v(${q.id},'same')">одинаково</button><button onclick="v(${q.id},'both_worse')">оба хуже</button><button onclick="v(${q.id},'skip')">пропустить</button>
+<input id=nt placeholder="заметка (что не так)" size=40></p>`:'<p>Ждущих пар нет.</p>';
+$('hist').innerHTML=P.filter(p=>p.status!='pending').reverse().map(p=>`<div class=done>#${p.id} ${p.problem}: ${p.a.label} vs ${p.b.label} → <b>${p.choice}</b> (${p.status}) ${p.note||''}</div>`).join('')}
+async function v(id,c){await fetch('/api/vote',{method:'POST',body:JSON.stringify({id,choice:c,note:$('nt').value})});load()}
+setInterval(load,4000);load();
+let d0=null;document.addEventListener('mousedown',e=>{if(e.target.className=='sel'&&!e.target.src.includes('box='))d0={x:e.offsetX,y:e.offsetY,im:e.target};e.preventDefault()});
+document.addEventListener('mouseup',async e=>{if(!d0)return;const im=d0.im,k=im.naturalWidth/im.width,x0=Math.min(d0.x,e.offsetX)*k,x1=Math.max(d0.x,e.offsetX)*k,y0=Math.min(d0.y,e.offsetY)*k,y1=Math.max(d0.y,e.offsetY)*k;d0=null;
+if(x1-x0>8&&y1-y0>8){const S=2048/Math.max(im.naturalWidth,im.naturalHeight);sf([x0,y0,x1,y1].map(v=>Math.round(v*S)),'drawn')}})
+</script>"""
+
+
+MODEL = """<!doctype html><meta charset=utf-8><title>model</title>
+<style>body{font:14px sans-serif;margin:16px;max-width:1100px}table{border-collapse:collapse}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left}
+select,input,button{font-size:14px;padding:4px;margin:2px}.h{color:#666}</style>
+<a href="/">&larr; head-wrap-ai</a> | <a href="/review">Голова: сравнение вариантов</a>
+<h2>Модель: из чего состоит, замена частей</h2>
+<p class=h>Отдельный режим: любая GLB-модель (не только голова). Исходный файл не меняется, результат пишется в новый файл.</p>
+<p>Файл: <select id=f onchange=show()></select></p><div id=t></div>
+<h3>Заменить / добавить / убрать часть</h3>
+<p>В файле <b id=tg></b> часть <select id=n></select>
+<br>на часть <select id=sf onchange=sparts()></select> <select id=sn></select>
+<br>новое имя файла (необязательно): <input id=o size=30 placeholder="work/new.glb">
+<br><button onclick="go('replace')">заменить</button><button onclick="go('add')">добавить из другого файла</button><button onclick="go('remove')">убрать</button></p>
+<div id=res class=h></div>
+<script>
+const $=i=>document.getElementById(i);let FILES=[];
+async function init(){FILES=(await (await fetch('/api/model')).json()).files;$('f').innerHTML=$('sf').innerHTML=FILES.map(x=>`<option>${x}</option>`).join('');show();sparts()}
+async function show(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('f').value))).json();$('tg').textContent=$('f').value;
+$('t').innerHTML='<table><tr><th>часть (node)<th>вершин<th>треугольников<th>UV<th>текстура<th>габариты (min .. max)</tr>'+r.parts.map(p=>`<tr><td><b>${p.node}</b><td>${p.vertices}<td>${p.triangles}<td>${p.uv?'да':'нет'}<td>${p.texture?p.texture.join('×'):'—'}<td>${p.bbox_min} .. ${p.bbox_max}</tr>`).join('')+'</table>';
+$('n').innerHTML=r.parts.map(p=>`<option>${p.node}</option>`).join('')}
+async function sparts(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('sf').value))).json();$('sn').innerHTML=r.parts.map(p=>`<option>${p.node}</option>`).join('')}
+async function go(op){const o=$('o').value;const r=await fetch('/api/model',{method:'POST',body:JSON.stringify({op,target:$('f').value,node:$('n').value,source:$('sf').value,snode:$('sn').value,out:o})});
+const j=await r.json().catch(()=>({}));$('res').textContent=j.out?'готово → '+j.out:'ошибка';await init()}
+init()
 </script>"""
 
 
@@ -131,6 +184,44 @@ class H(BaseHTTPRequestHandler):
             self.send(load())
         elif path == '/api/log':
             self.send(LOG)
+        elif path == '/model':
+            self.send(MODEL, 'text/html')
+        elif path == '/api/model':
+            import model
+            f = urllib.parse.parse_qs(q).get('f', [''])[0]
+            if f:
+                f = os.path.realpath(f if os.path.isabs(f) else os.path.join(HERE, f))
+                if not f.startswith(HERE + os.sep) or not f.endswith('.glb'):
+                    self.send_error(403)
+                    return
+                self.send({'file': f, 'parts': model.parts(f)})
+            else:
+                files = sorted(glob.glob(os.path.join(HERE, 'work', '*.glb')) + glob.glob(os.path.join(HERE, 'models', '*.glb')))
+                self.send({'files': [os.path.relpath(x, HERE) for x in files]})
+        elif path == '/review':
+            self.send(REVIEW, 'text/html')
+        elif path == '/api/pairs':
+            import review
+            self.send({'pairs': review.load_pairs()[-40:], 'stats': review.stats(), 'focus': review.get_focus()})
+        elif path == '/api/img':
+            raw = urllib.parse.parse_qs(q)['p'][0]
+            p = os.path.realpath(raw if os.path.isabs(raw) else os.path.join(HERE, raw))
+            if not (p.startswith(HERE + os.sep) or p.startswith('/tmp/')) or not p.lower().endswith(('.png', '.jpg', '.jpeg')):
+                self.send_error(403)
+            else:
+                import io
+                from PIL import Image
+                qs = urllib.parse.parse_qs(q)
+                im = Image.open(p).convert('RGB')
+                if 'box' in qs:
+                    im = im.crop(tuple(int(v) for v in qs['box'][0].split(',')))
+                    k = max(1, 560 // max(im.size))
+                    im = im.resize((im.width * k, im.height * k), Image.LANCZOS)
+                else:
+                    im.thumbnail((900, 900))
+                buf = io.BytesIO()
+                im.save(buf, 'PNG')
+                self.send(buf.getvalue(), 'image/png')
         elif path == '/api/check':
             c = load()
             p = c['profiles'][int(q.split('=')[1])]
@@ -145,6 +236,38 @@ class H(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
+        if self.path == '/api/model':
+            import model
+            d = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            def t(k):
+                r = os.path.realpath(os.path.join(HERE, d[k]))
+                if not r.startswith(HERE + os.sep) or (k == 'out' and not r.endswith('.glb')):
+                    raise ValueError('path outside the project / not .glb: ' + d[k])
+                return r
+            if d['op'] == 'replace':
+                out = model.replace(t('target'), d['node'], t('source'), d.get('snode') or None, d.get('out') and t('out'))
+            elif d['op'] == 'add':
+                out = model.add(t('target'), t('source'), d['snode'], d.get('name') or None, d.get('out') and t('out'))
+            elif d['op'] == 'remove':
+                out = model.remove(t('target'), d['node'], d.get('out') and t('out'))
+            else:
+                self.send_error(400)
+                return
+            self.send({'ok': True, 'out': os.path.relpath(out, HERE)})
+            return
+        if self.path == '/api/focus':
+            import review
+            d = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            review.set_focus(d.get('box'), d.get('name', 'drawn'))
+            self.send({'ok': True})
+            return
+        if self.path == '/api/vote':
+            import review
+            d = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            acc = review.vote(int(d['id']), d['choice'], d.get('note', ''))
+            log(f"выбор по паре {d['id']}: {d['choice']}; оценщик, точность на выборах: {acc}")
+            self.send({'ok': True, 'acc': acc})
+            return
         if self.path == '/api/config':
             save(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
             log('конфиг сохранён')
