@@ -52,7 +52,11 @@ def write_v(template, out, V):
 CAM = {'front': (0, 0, 1), 'left': (1, 0, 0), 'back': (0, 0, -1), 'right': (-1, 0, 0)}  # towards the camera, as pdm_project_views.project
 
 
-def from_views(paths, tgt, W, F, P, N, col, size=1024, base=0.15, eps=0.03, far=None):
+HAIR_V = 0.30  # a view pixel darker than this is hair (max of RGB / 255)
+SKIN_ON_HAIR = 0.1  # weight left to a pixel of the wrong class
+
+
+def from_views(paths, tgt, W, F, P, N, col, size=1024, base=0.15, eps=0.03, far=None, lab=None, names=None):
     """Colour of every texel from the Qwen views: weight = facing^3 (cos to the camera, 0.5 -> 0, 0.85 -> 1) x visible
     (a depth buffer of the wrapped template) x inside the figure; the atlas colour of the target is the base (weight `base`)."""
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'corsairs-remake', 'tools'))
@@ -87,6 +91,12 @@ def from_views(paths, tgt, W, F, P, N, col, size=1024, base=0.15, eps=0.03, far=
             w[far] = np.maximum(w[far], ((cosv[far] > 0.0) * inner[qy, qx][far]).astype(np.float32))
         if far is not None and name != 'front':  # eyelids come from the front view only
             w[far] = 0
+        if lab is not None:  # segmentation by colour: no hair pixel on the skin regions, no skin pixel on the scalp
+            px_ = f[qy, qx].astype(np.float32) / 255.
+            hair = px_.max(1) < HAIR_V
+            skin_reg = np.isin(lab, [names.index(n) for n in ('face', 'eyelid', 'neck', 'nose', 'ear')])
+            w[skin_reg & hair] *= SKIN_ON_HAIR
+            w[(lab == names.index('scalp')) & ~hair] *= SKIN_ON_HAIR
         acc += f[qy, qx] * w[:, None]
         wsum += w
         print(f'{name}: texels with weight > 0.5: {int((w > 0.5).sum())}')
@@ -118,7 +128,10 @@ def main():
     S = a.size
     img = np.zeros((S, S, 3), np.uint8)
     cov = np.zeros((S, S), bool)
-    pts, px, nrm = [], [], []
+    pts, px, nrm, labs = [], [], [], []
+    import json
+    rj = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template', 'regions.json')))
+    vlab = np.array(rj['vertex'])
     for f in F:
         uv = vt[[p[1] for p in f]] * S
         x0, y0 = np.floor(uv.min(0)).astype(int)
@@ -137,6 +150,7 @@ def main():
         bb = np.column_stack([1 - b[m].sum(1), b[m]])
         P = bb @ W[[p[0] for p in f]]
         pts.append(P)
+        labs.append(np.full(len(P), vlab[f[0][0]]))
         n = np.cross(W[f[1][0]] - W[f[0][0]], W[f[2][0]] - W[f[0][0]])
         nrm.append(np.tile(n / (np.linalg.norm(n) + 1e-12), (len(P), 1)))
         px.append(c[m].astype(int) - 0)
@@ -145,6 +159,7 @@ def main():
     F = np.array([[p[0] for p in f] for f in F])
     px = np.vstack(px)
     N = np.vstack(nrm)
+    lab = np.concatenate(labs)
     cp, dist, tid = trimesh.proximity.closest_point(tgt, P)
     # texels far from the target (eyelids: the target has a pit there) look along the normal of the template into the
     # target instead of taking the nearest point, which is skin beside the pit
@@ -172,7 +187,7 @@ def main():
     img[row, np.clip(px[:, 0], 0, S - 1)] = col
     cov[row, np.clip(px[:, 0], 0, S - 1)] = True
     if a.views:
-        col = from_views(a.views, tgt, W, F, P, N, col, far=dist > FAR)
+        col = from_views(a.views, tgt, W, F, P, N, col, far=dist > FAR, lab=lab, names=rj['names'])
         img[row, np.clip(px[:, 0], 0, S - 1)] = col
     Image.fromarray(img).save(a.out)
     print('texels', int(cov.sum()), 'of', S * S, '->', a.out)
