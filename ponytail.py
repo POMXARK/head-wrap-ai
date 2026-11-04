@@ -91,17 +91,21 @@ def hair_texture(P, size=512, seed=1):
     return img.astype(np.uint8)
 
 
-def build(P, out_obj, out_png, scale=0.85, target=None, views=None):
+SCALE_Z = 1.3  # depth of the tube: the left view silhouette fits best at 1.3 (metrics.py: mean IoU 0.917, 0.85 gave 0.907)
+
+
+def build(P, out_obj, out_png, scale=0.85, target=None, views=None, scale_z=SCALE_Z):
     from PIL import Image
     S = spine(P)
-    S[:, 3:] *= scale
+    S[:, 3] *= scale
+    S[:, 4] *= scale_z
     S[0, 0], S[0, 2] = 0.03, -0.27  # the root sits inside the back of the head
     S[1, 2] = max(S[1, 2], -0.31)  # the first ring leaves the skull gradually (back of the head at y 0: z -0.28)
     S = np.vstack([[0.08, 0.0, -0.255, 0.05, 0.05], S])  # a ring inside the hair mass above: no gap at the nape
     V, UV, F = tube(S)
     if views:  # strands from the views (the original), the procedural texture only as a fallback
         S0 = spine(P)
-        img = texture_from_views(S0, target, views, scale=scale)
+        img = texture_from_views(S0, target, views, scale=scale, scale_z=scale_z)
     else:
         img = hair_texture(P)
     Image.fromarray(img).save(out_png)
@@ -115,7 +119,7 @@ def build(P, out_obj, out_png, scale=0.85, target=None, views=None):
     return V, F
 
 
-def texture_from_views(S, target, view_paths, size=512, scale=0.85):
+def texture_from_views(S, target, view_paths, size=512, scale=0.85, scale_z=SCALE_Z):
     """strand texture of the tube from the four Qwen views: a fine grid of the tube (rings x sides) is projected into the
     views (as in bake.from_views), the colour is blended by facing^3 inside the figure, then resized to size x size
     (row = ring from the root, column = angle, as the UV of tube())."""
@@ -124,7 +128,8 @@ def texture_from_views(S, target, view_paths, size=512, scale=0.85):
     from PIL import Image
     from bake import CAM, _tv
     S = S.copy()
-    S[:, 3:] *= scale
+    S[:, 3] *= scale
+    S[:, 4] *= scale_z
     S[0, 0], S[0, 2] = 0.03, -0.27
     S[1, 2] = max(S[1, 2], -0.31)
     S = np.vstack([[0.08, 0.0, -0.255, 0.05, 0.05], S])
