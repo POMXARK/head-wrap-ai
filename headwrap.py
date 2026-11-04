@@ -27,6 +27,7 @@ PATCHES = ['1840,1030,1900,1075', '1858,1010,1868,1100']
 
 def run(*a, cwd=HERE):
     print('+', ' '.join(str(x) for x in a), flush=True)
+    a = tuple(sys.executable if x == 'python3' else x for x in a)  # no python3 on Windows
     r = subprocess.run([str(x) for x in a], cwd=cwd)
     if r.returncode:
         sys.exit(f'step failed ({r.returncode}): {a[1] if len(a) > 1 else a[0]}')
