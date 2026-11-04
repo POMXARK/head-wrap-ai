@@ -125,7 +125,7 @@ async function load(){const r=await (await fetch('/api/pairs')).json(),P=r.pairs
 $('st').textContent=`пар: ${s.pairs}, ждут: ${s.pending}, ваших выборов: ${s.voted}, решил оценщик: ${s.auto}; оценщик учится на ${s.evaluator_votes} выборах, точность на них ${s.evaluator_acc==null?'—':Math.round(s.evaluator_acc*100)+'%'}`;
 const f=r.focus;$('foc').innerHTML='Область работы: '+(f?`<b>${f.name||''}</b> [${f.box}] <button onclick="sf(null)">снять</button>`:'вся картинка')+' — выделите мышью на картинке A/B/до, чтобы сузить';
 const q=P.filter(p=>p.status=='pending')[0];
-$('cur').innerHTML=q?`<h3>#${q.id} ${q.problem}: ${q.question}</h3>${q.pred_a!=null?`<div class=h>оценщик думает: A лучше с вероятностью ${Math.round(q.pred_a*100)}%</div>`:''}
+$('cur').innerHTML=q?`<h3>#${q.id} ${q.problem}: ${q.question}</h3>${q.pred_a!=null?`<div class=h>оценщик думает: A лучше с вероятностью ${Math.round(q.pred_a*100)}%</div>`:''}${q.vlm?`<div class=h>VLM-судья: лучше ${q.vlm.toUpperCase()}</div>`:''}
 <div class=row>${q.base?`<div>до<br><img class=sel src="${img(q.base)}"></div>`:''}<div><b>A</b> ${q.a.label}<br><img class=sel src="${img(q.a.img,q.box)}" data-full="${img(q.a.img)}"></div><div><b>B</b> ${q.b.label}<br><img class=sel src="${img(q.b.img,q.box)}"></div></div>
 <p><button onclick="v(${q.id},'a')">A лучше</button><button onclick="v(${q.id},'b')">B лучше</button><button onclick="v(${q.id},'same')">одинаково</button><button onclick="v(${q.id},'both_worse')">оба хуже</button><button onclick="v(${q.id},'skip')">пропустить</button>
 <input id=nt placeholder="заметка (что не так)" size=40></p>`:'<p>Ждущих пар нет.</p>';
@@ -150,6 +150,9 @@ select,input,button{font-size:14px;padding:4px;margin:2px}.h{color:#666}</style>
 <br>на часть <select id=sf onchange=sparts()></select> <select id=sn></select>
 <br>новое имя файла (необязательно): <input id=o size=30 placeholder="work/new.glb">
 <br><button onclick="go('replace')">заменить</button><button onclick="go('add')">добавить из другого файла</button><button onclick="go('remove')">убрать</button></p>
+<h3>Ремеш, UV-развёртка</h3>
+<p>Часть выбранная выше. Ремеш: целевое число треугольников <input id=fc size=6> или длина ребра <input id=ed size=6> или подразбиений <input id=sd size=3>
+<button onclick="go('remesh')">ремеш + новая UV + перенос текстуры</button> <button onclick="go('uv')">только новая UV-развёртка</button></p>
 <div id=res class=h></div>
 <script>
 const $=i=>document.getElementById(i);let FILES=[];
@@ -158,7 +161,7 @@ async function show(){const r=await (await fetch('/api/model?f='+encodeURICompon
 $('t').innerHTML='<table><tr><th>часть (node)<th>вершин<th>треугольников<th>UV<th>текстура<th>габариты (min .. max)</tr>'+r.parts.map(p=>`<tr><td><b>${p.node}</b><td>${p.vertices}<td>${p.triangles}<td>${p.uv?'да':'нет'}<td>${p.texture?p.texture.join('×'):'—'}<td>${p.bbox_min} .. ${p.bbox_max}</tr>`).join('')+'</table>';
 $('n').innerHTML=r.parts.map(p=>`<option>${p.node}</option>`).join('')}
 async function sparts(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('sf').value))).json();$('sn').innerHTML=r.parts.map(p=>`<option>${p.node}</option>`).join('')}
-async function go(op){const o=$('o').value;const r=await fetch('/api/model',{method:'POST',body:JSON.stringify({op,target:$('f').value,node:$('n').value,source:$('sf').value,snode:$('sn').value,out:o})});
+async function go(op){const o=$('o').value;const r=await fetch('/api/model',{method:'POST',body:JSON.stringify({op,target:$('f').value,node:$('n').value,source:$('sf').value,snode:$('sn').value,out:o,faces:$('fc').value,edge:$('ed').value,subdivide:$('sd').value})});
 const j=await r.json().catch(()=>({}));$('res').textContent=j.out?'готово → '+j.out:'ошибка';await init()}
 init()
 </script>"""
@@ -248,6 +251,12 @@ class H(BaseHTTPRequestHandler):
                 out = model.replace(t('target'), d['node'], t('source'), d.get('snode') or None, d.get('out') and t('out'))
             elif d['op'] == 'add':
                 out = model.add(t('target'), t('source'), d['snode'], d.get('name') or None, d.get('out') and t('out'))
+            elif d['op'] == 'remesh':
+                out = model.remesh(t('target'), d['node'], int(d['faces']) if d.get('faces') else None,
+                                   float(d['edge']) if d.get('edge') else None, int(d.get('subdivide') or 0),
+                                   out=d.get('out') and t('out'))
+            elif d['op'] == 'uv':
+                out = model.new_uv(t('target'), d['node'], out=d.get('out') and t('out'))
             elif d['op'] == 'remove':
                 out = model.remove(t('target'), d['node'], d.get('out') and t('out'))
             else:

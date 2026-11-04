@@ -46,6 +46,9 @@ def main():
     ap.add_argument('--box')
     ap.add_argument('--region', help='part by name from template/regions.json (face, ear, neck, lips, nose, eyelid, scalp)')
     ap.add_argument('--question', default='Какой вариант лучше?')
+    ap.add_argument('--parts', help='parts of the head_auto policy context, e.g. ear,face')
+    ap.add_argument('--intent', help='intent / defect kind of the policy context, e.g. asym')
+    ap.add_argument('--vlm', action='store_true', help='ask the VLM judge too (hint on the page)')
     ap.add_argument('--ask', action='store_true')
     ap.add_argument('--all', action='store_true')
     ap.add_argument('--note', default='')
@@ -53,7 +56,10 @@ def main():
     a = ap.parse_args()
     if a.cmd == 'add':
         box = [int(v) for v in a.box.split(',')] if a.box else (review.region_box(a.region) if a.region else None)
-        pid = review.add_pair(a.x, variant(a, 'a'), variant(a, 'b'), a.base, a.question, box)
+        pid = review.add_pair(a.x, variant(a, 'a'), variant(a, 'b'), a.base, a.question, box,
+                              a.parts.split(',') if a.parts else None, a.intent)
+        if a.vlm:
+            print('vlm hint', review.vlm_hint(pid))
         print('pair', pid)
         if a.ask:
             c = review.decide(pid)

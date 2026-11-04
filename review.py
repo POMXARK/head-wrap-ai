@@ -101,7 +101,7 @@ def _feat(v, box):
     return features(v['img'] if os.path.isabs(v['img']) else os.path.join(HERE, v['img']), box)
 
 
-def add_pair(problem, a, b, base=None, question='Какой вариант лучше?', box=None):
+def add_pair(problem, a, b, base=None, question='Какой вариант лучше?', box=None, parts=None, intent=None):
     """a, b = {'img': path, 'tool': ..., 'params': {...}, 'label': text}; returns the id."""
     box = box or (get_focus() or {}).get('box')
     P = load_pairs()
@@ -109,7 +109,7 @@ def add_pair(problem, a, b, base=None, question='Какой вариант лу�
     ev = Evaluator()
     pred = ev.prob_a(_feat(a, box), _feat(b, box)) if ev.n else None
     P.append({'id': pid, 'ts': time.strftime('%Y-%m-%dT%H:%M:%S'), 'problem': problem, 'a': a, 'b': b, 'base': base,
-              'box': box, 'question': question, 'status': 'pending', 'pred_a': pred})
+              'box': box, 'question': question, 'parts': parts or [], 'intent': intent, 'status': 'pending', 'pred_a': pred})
     save_pairs(P)
     return pid
 
@@ -137,6 +137,57 @@ def _journal(p, choice, user):
         journal.add(**r)
 
 
+HEAD_AGENT = os.path.join(os.environ.get('W', '/media/roman/383be9ee-c114-4bf8-8956-66b985661cb4/home/remake-linux'),
+                          'corsairs-remake', 'tools', 'model3d')
+REWARD = 2.0  # score points: the scale of the gains head_auto.py puts into the policy (-20..20)
+
+
+def to_policy(p, choice):
+    """Your choice is a reward of the arms in the policy of head_auto.py / head_agent.py (tool = arm id there, like
+    'relax iters=5'; p['parts'] and p['intent'] give the context): winner +REWARD, loser and both_worse -REWARD."""
+    import sys
+    if not p.get('parts') or choice not in ('a', 'b', 'both_worse'):
+        return 0
+    sys.path.insert(0, HEAD_AGENT)
+    try:
+        import head_agent as ha
+    except Exception:
+        return 0
+    path = os.environ.get('HEAD_POLICY', ha.POLICY)
+    pol = ha.load_policy(path)
+    ck = '|'.join(ha.context(p['parts'], [p['intent']] if p.get('intent') else []))
+    n = 0
+    for v, r in ((p['a'], REWARD if choice == 'a' else -REWARD), (p['b'], REWARD if choice == 'b' else -REWARD)):
+        aid = v.get('tool')
+        if choice == 'both_worse':
+            r = -REWARD
+        if not aid:
+            continue
+        pol['ctx'].setdefault(ck, {})[aid] = ha.update(pol['ctx'].get(ck, {}).get(aid, [0, 0.]), r)
+        for q in p['parts']:
+            pol['part'].setdefault(q, {})[aid] = ha.update(pol['part'].get(q, {}).get(aid, [0, 0.]), r)
+        pol['arm'][aid] = ha.update(pol['arm'].get(aid, [0, 0.]), r)
+        n += 1
+    ha.save_policy(pol, path)
+    return n
+
+
+def vlm_hint(pid):
+    """The VLM judge (judge.py, Ollama) as a second opinion on the crops: stored in the pair as 'vlm' = 'a'|'b'|None."""
+    P = load_pairs()
+    p = next(x for x in P if x['id'] == pid)
+    try:
+        import judge
+        w, _ = judge.compare(os.path.join(HERE, p['a']['img']) if not os.path.isabs(p['a']['img']) else p['a']['img'],
+                          os.path.join(HERE, p['b']['img']) if not os.path.isabs(p['b']['img']) else p['b']['img'])
+        p['vlm'] = {'A': 'a', 'B': 'b'}.get(w)
+    except Exception as e:
+        p['vlm'] = None
+        p['vlm_error'] = str(e)[:120]
+    save_pairs(P)
+    return p['vlm']
+
+
 def vote(pid, choice, note='', auto=False):
     if choice not in ('a', 'b', 'same', 'both_worse', 'skip'):
         raise ValueError(choice)
@@ -146,6 +197,8 @@ def vote(pid, choice, note='', auto=False):
     save_pairs(P)
     if choice != 'skip':
         _journal(p, choice, user=not auto)
+        if not auto:
+            to_policy(p, choice)
     return retrain().acc if not auto else None
 
 
