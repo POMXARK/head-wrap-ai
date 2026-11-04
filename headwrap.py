@@ -70,7 +70,8 @@ def texture(first=0):
 def build():
     run('python3', 'export.py', w('wrapped20.obj'), TPL, w('baked29.png'), w('hero1_eye.glb'), '--ponytail',
         w('ponytail_tube.obj'), w('ponytail_hair28.png'), '--slit', w('eye_open.json'),
-        '../glbcheck/hero1_head_front.png', '../glbcheck/hv4/auto.glb')
+        '../glbcheck/hero1_head_front.png', '../glbcheck/hv4/auto.glb', '--eyes-json',
+        '../corsairs-remake/tools/eyes_ai.json', 'ai_hero_head_1,ai_hero1_head_1')
 
 
 def game(model):

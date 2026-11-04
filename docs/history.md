@@ -146,3 +146,9 @@
 - 2026-11-02 `812495d` feat: glb optimizer — drop specks and Taubin-smooth the decimated mesh; no eye catchlight
 - 2026-11-02 `99d0bea` feat: PDMPartSave copies the painted GLB next to the raw one
 - 2026-11-04 `b4a8ac8` perf: repaint 21.6 -> 9.4 s, parallel tries in head_auto
+
+## Складка под глазом (воронка глазницы)
+- `fold_probe.py [glb] [eye_open.json]` — анализатор без запуска игры: профиль z и нормалей через центр глаза, число острых рёбер под глазом, карта глубины `fold_profile.png`.
+- Причина складки: у обёрнутой головы вокруг глаза воронка с плоским дном (z 0,279 против щеки 0,326) и стенкой с перевёрнутыми нормалями.
+- `export.py smooth_pits` выравнивает воронку точным решением Лапласа (флаг `--no-fold` отключает), `under_eye_mask` закрашивает кожей текстуру под глазом; шаг входит в `headwrap.build()`.
+- Проверка анализатором: плита 0,319 вместо 0,28, без перевёрнутой стенки; в игре дуги и эллипсов нет, моргание работает.
