@@ -3,11 +3,13 @@
 The target (generated head) has the ponytail, the wrapped template does not. The ponytail is the part of the target that
 lies outside the wrapped head (distance > OUT) behind and below the skull (z < ZMAX, y < YMAX); the connected pieces
 of it are kept as their own mesh with the UV and the material of the target. The head stays the clean template."""
+import os
 import sys
 import numpy as np
 import trimesh
 from bake import read_mesh
 
+HERE = os.path.dirname(os.path.abspath(__file__))
 OUT, ZMAX, YMAX, MIN_FACES = 0.02, -0.2, 0.03, 200
 
 
@@ -89,7 +91,7 @@ def hair_texture(P, size=512, seed=1):
     return img.astype(np.uint8)
 
 
-def build(P, out_obj, out_png, scale=0.85):
+def build(P, out_obj, out_png, scale=0.85, target=None, views=None):
     from PIL import Image
     S = spine(P)
     S[:, 3:] *= scale
@@ -97,7 +99,12 @@ def build(P, out_obj, out_png, scale=0.85):
     S[1, 2] = max(S[1, 2], -0.31)  # the first ring leaves the skull gradually (back of the head at y 0: z -0.28)
     S = np.vstack([[0.08, 0.0, -0.255, 0.05, 0.05], S])  # a ring inside the hair mass above: no gap at the nape
     V, UV, F = tube(S)
-    Image.fromarray(hair_texture(P)).save(out_png)
+    if views:  # strands from the views (the original), the procedural texture only as a fallback
+        S0 = spine(P)
+        img = texture_from_views(S0, target, views, scale=scale)
+    else:
+        img = hair_texture(P)
+    Image.fromarray(img).save(out_png)
     with open(out_obj, 'w') as f:
         for v in V:
             f.write('v %.5f %.5f %.5f\n' % tuple(v))
@@ -106,3 +113,44 @@ def build(P, out_obj, out_png, scale=0.85):
         for a, b, c in F + 1:
             f.write('f %d/%d %d/%d %d/%d\n' % (a, a, b, b, c, c))
     return V, F
+
+
+def texture_from_views(S, target, view_paths, size=512, scale=0.85):
+    """strand texture of the tube from the four Qwen views: a fine grid of the tube (rings x sides) is projected into the
+    views (as in bake.from_views), the colour is blended by facing^3 inside the figure, then resized to size x size
+    (row = ring from the root, column = angle, as the UV of tube())."""
+    sys.path.insert(0, os.path.join(HERE, '..', 'corsairs-remake', 'tools'))
+    import pdm_project_views as pv
+    from PIL import Image
+    from bake import CAM, _tv
+    S = S.copy()
+    S[:, 3:] *= scale
+    S[0, 0], S[0, 2] = 0.03, -0.27
+    S[1, 2] = max(S[1, 2], -0.31)
+    S = np.vstack([[0.08, 0.0, -0.255, 0.05, 0.05], S])
+    sides, sub = 96, 16
+    V, UV, _ = tube(S, sides=sides, sub=sub)
+    n_ring = len(V) // (sides + 1)
+    G = V.reshape(n_ring, sides + 1, 3)
+    cen = G[:, :-1].mean(1, keepdims=True)
+    nrm = G - cen
+    nrm[..., 1] = 0
+    nrm /= np.linalg.norm(nrm, axis=2, keepdims=True) + 1e-9
+    P, N = G.reshape(-1, 3), nrm.reshape(-1, 3)
+    lo, hi = target.vertices.min(0), target.vertices.max(0)
+    acc, wsum = np.zeros((len(P), 3)), np.full(len(P), 1e-6)
+    for name, path in zip(pv.NAMES, view_paths):
+        if name == 'front':  # the face looks through the head onto the inner side of the tail: only back and sides
+            continue
+        f, (x0, x1, y0, y1), inner = pv.load_view(path)
+        tp, yp = _tv(pv, name, P, lo, hi)
+        qx = np.clip((x0 + tp * (x1 - x0)).astype(int), 0, f.shape[1] - 1)
+        qy = np.clip((y1 - yp * (y1 - y0)).astype(int), 0, f.shape[0] - 1)
+        w = np.clip((N @ np.array(CAM[name], float) - 0.2) / 0.6, 0, 1) ** 2 * inner[qy, qx]
+        acc += f[qy, qx] * w[:, None]
+        wsum += w
+    base = np.array([35., 27., 24.])  # dark hair where no view sees the tube
+    col = (acc + base * 0.05) / (wsum[:, None] + 0.05)
+    img = Image.fromarray(col.reshape(n_ring, sides + 1, 3).clip(0, 255).astype(np.uint8)).resize((size, size), Image.BICUBIC)
+    return np.asarray(img)
+
