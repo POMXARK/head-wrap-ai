@@ -2,6 +2,7 @@
 """Stage 3 (first version): fit the template head onto a generated head: wrap_fit.py target.glb template/head.obj out.obj
 1. similarity ICP (scale, rotation, shift) from a bbox start, 2. non-rigid ICP (trimesh nricp_amberg).
 The eyes are not touched here (rigid move with the head frame is done by the caller)."""
+import json
 import sys
 import numpy as np
 import trimesh
@@ -35,10 +36,11 @@ def free_weights(tpl_base, eyes_path='template/eyes.obj'):
     return np.where((r == 1) | (r == 2), 0., 1.)
 
 
-def nonrigid(target, tpl, weights=None):
+def nonrigid(target, tpl, weights=None, lm=None):
     """steps: [stiffness, landmark weight, normal weight, iterations]; the stiffness falls, the template follows the target"""
     P = reg.nricp_amberg(tpl, target, steps=[[0.01, 10, 0.5, 10], [0.003, 5, 0.1, 10], [0.001, 2, 0.05, 10]],
-                         eps=1e-4, gamma=1, distance_threshold=0.05)
+                         eps=1e-4, gamma=1, distance_threshold=0.05,
+                         source_landmarks=None if lm is None else lm[0], target_positions=None if lm is None else lm[1])
     out = tpl.copy()
     out.vertices = P
     if weights is not None:  # the free vertices keep the shape of the template: only a smooth shift of their neighbours
@@ -49,8 +51,12 @@ def nonrigid(target, tpl, weights=None):
             nb[a].append(b)
             nb[b].append(a)
         D[free] = 0
+        pinned = np.zeros(len(P), bool)
+        if lm is not None:  # a landmark inside a free zone (eye corners, lids) is a fixed point of the smoothing
+            pinned[lm[0]] = True
+            D[lm[0]] = lm[1] - tpl.vertices[lm[0]]
         for _ in range(300):
-            for i in np.where(free)[0]:
+            for i in np.where(free & ~pinned)[0]:
                 D[i] = D[nb[i]].mean(0)
         out.vertices = tpl.vertices + D
     return out
@@ -62,7 +68,12 @@ def main():
     out, M, cost = fit(tgt, tpl)
     print('similarity icp cost', cost, 'scale', np.cbrt(abs(np.linalg.det(M[:3, :3]))))
     sim = out
-    out = nonrigid(tgt, sim, free_weights(tpl))
+    lm = None
+    if len(sys.argv) > 4:  # landmarks.json of landmarks.py targets (lower lids dropped: the ray hits the bottom of the pit)
+        t = {k: v for k, v in json.load(open(sys.argv[4])).items() if k not in ('lid_r_low', 'lid_l_low')}
+        lm = (np.array([v['vertex'] for v in t.values()]), np.array([v['target'] for v in t.values()]))
+        print('landmarks', len(t))
+    out = nonrigid(tgt, sim, free_weights(tpl), lm)
     ev = read_v('template/eyes.obj')
     ne = ev @ M[:3, :3].T + M[:3, 3]
     for sgn in (1, -1):  # each eye follows the mean shift of the eyelid vertices around it
