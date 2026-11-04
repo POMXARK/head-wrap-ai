@@ -73,13 +73,13 @@ table.btns td{text-align:left;border:0;font-size:14px}td,th{border:1px solid #bb
 <a href="/">&larr; head-wrap-ai</a><h2>Конвейер головы</h2>
 <p>Голова собирается из готовых промежуточных файлов (<code>work/</code>) шагами сверху вниз. Кнопки запускают ровно эти шаги; результат — файл <code>work/hero1_eye.glb</code>, он же показан справа в 3D.</p>
 <table class=btns>
-<tr><td><button onclick="go('status')">Состояние</button></td><td>Показать, какие файлы шагов есть и свежие ли они. Ничего не меняет.</td></tr>
-<tr><td><button onclick="go('texture')">Текстура</button></td><td>Пересобрать цвет кожи головы (подгонка цвета, швы шеи, нейрозаливка LaMa). Долго. Нужна, если меняли исходную картинку.</td></tr>
-<tr><td><button onclick="go('build')"><b>Собрать голову</b></button></td><td>Главная кнопка: собрать модель головы с глазами и хвостом в <code>hero1_eye.glb</code> и сразу оценить глаза и всю сетку.</td></tr>
-<tr><td><button onclick="go('eyes')">Оценка глаз</button></td><td>Только оценка глаз готовой модели (видны ли, раскрыты ли, нет ли складки): таблица и картинка слева.</td></tr>
-<tr><td><button onclick="go('mesh')">Оценка сетки</button></td><td>Оценка всей головы: осколки, растянутая текстура (щека, ухо, шея, челюсть). Картинка профиля — ниже, синие и красные точки — дефекты.</td></tr>
-<tr><td>Модель: <select id=mdl><option>hero1</option><option>hero</option></select> <button onclick="go('game')">В игру</button></td><td>Положить собранную голову в игру для выбранной модели (hero или hero1) и снять рендеры. Перезаписывает файлы игры.</td></tr>
-<tr><td><button onclick="go('all')">Всё</button></td><td>Собрать → в игру → рендер одним нажатием.</td></tr>
+<tr><td><button title="Показать, какие файлы шагов есть и свежие ли они. Ничего не меняет." onclick="go('status')">Состояние</button></td><td>Показать, какие файлы шагов есть и свежие ли они. Ничего не меняет.</td></tr>
+<tr><td><button title="Пересобрать цвет кожи головы (подгонка цвета, швы шеи, LaMa). Долго." onclick="go('texture')">Текстура</button></td><td>Пересобрать цвет кожи головы (подгонка цвета, швы шеи, нейрозаливка LaMa). Долго. Нужна, если меняли исходную картинку.</td></tr>
+<tr><td><button title="Собрать hero1_eye.glb (голова, глаза, хвост) и сразу оценить глаза и сетку." onclick="go('build')"><b>Собрать голову</b></button></td><td>Главная кнопка: собрать модель головы с глазами и хвостом в <code>hero1_eye.glb</code> и сразу оценить глаза и всю сетку.</td></tr>
+<tr><td><button title="Оценка только глаз готовой модели: таблица и картинка." onclick="go('eyes')">Оценка глаз</button></td><td>Только оценка глаз готовой модели (видны ли, раскрыты ли, нет ли складки): таблица и картинка слева.</td></tr>
+<tr><td><button title="Оценка всей головы: осколки и растянутая текстура, картинка профиля." onclick="go('mesh')">Оценка сетки</button></td><td>Оценка всей головы: осколки, растянутая текстура (щека, ухо, шея, челюсть). Картинка профиля — ниже, синие и красные точки — дефекты.</td></tr>
+<tr><td>Модель: <select id=mdl title='Для какой модели игры собрать голову: hero или hero1'><option>hero1</option><option>hero</option></select> <button title="Положить голову в игру для выбранной модели и снять рендеры. Перезаписывает файлы игры." onclick="go('game')">В игру</button></td><td>Положить собранную голову в игру для выбранной модели (hero или hero1) и снять рендеры. Перезаписывает файлы игры.</td></tr>
+<tr><td><button title="Собрать, затем в игру, затем рендер — одним нажатием." onclick="go('all')">Всё</button></td><td>Собрать → в игру → рендер одним нажатием.</td></tr>
 </table><div><span id=st></span></div>
 <h3>Журнал</h3><pre id=lg></pre>
 <div class=row><div><h3>Оценка глаз по мешам</h3><div id=sc>нет данных — нажмите «Оценка глаз»</div><br><img id=im hidden><h3>Оценка сетки (профиль)</h3><img id=mi hidden onerror="this.hidden=true"></div>
@@ -91,7 +91,8 @@ const $=i=>document.getElementById(i);let glbT=0;
 async function go(s){const r=await (await fetch('/api/run',{method:'POST',body:JSON.stringify({step:s,model:$('mdl').value})})).json();if(r.error)alert(r.error)}
 function table(e){const ks=['visible','through','aperture','picture','iris','back','step','shade','depth','gaps','blocky'];
 const T={visible:[.9,1e9],through:[-1,.03],aperture:[.27,.45],picture:[.5,1e9],back:[-1,0],step:[-1,.006],shade:[-1,25],depth:[-1,.04],gaps:[-1,0],blocky:[-1,.6]};
-let h='<b>score '+Math.round(e.score)+'/100</b><table><tr><th>вид</th>'+ks.map(k=>'<th>'+k+'</th>').join('')+'</tr>';
+const D={visible:'видимая доля заплатки глаза (меньше 0.9 — глаз закрыт кожей)',through:'доля пикселей глаза, где виден фон (дыра)',aperture:'высота/ширина раскрытого глаза (норма 0.27–0.45)',picture:'доля не-кожи в глазу (белок, радужка)',iris:'тёмные пиксели радужки и зрачка',back:'вывернутые грани под глазом',step:'ступенька глубины под глазом (складка)',shade:'скачок яркости под глазом (дуга, пятно)',depth:'глубина ямки щеки под глазом',gaps:'дыры в голове рядом с глазом',blocky:'доля одинаковых соседних пикселей щеки (увеличенная текстура)'};
+let h='<b>score '+Math.round(e.score)+'/100</b><table><tr><th>вид</th>'+ks.map(k=>'<th title="'+D[k]+'">'+k+'</th>').join('')+'</tr>';
 for(const v in e.views){h+='<tr><th>'+v+'</th>'+ks.map(k=>{const x=e.views[v][k],t=T[k];const bad=t&&(x<t[0]||x>t[1]);return '<td class="'+(bad?'bad':'')+'">'+(+x).toFixed(3)+'</td>'}).join('')+'</tr>'}
 return h+'</table>'}
 async function poll(){const s=await (await fetch('/api/run')).json();
