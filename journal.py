@@ -29,7 +29,7 @@ def main():
     ap.add_argument('--params', default='{}')
     ap.add_argument('--metric', action='append', default=[])
     ap.add_argument('--image')
-    ap.add_argument('--verdict', choices=['better', 'same', 'worse', 'partial', 'deadend'])
+    ap.add_argument('--verdict', choices=['better', 'same', 'worse', 'partial', 'deadend', 'unknown'])
     ap.add_argument('--note', default='')
     a = ap.parse_args()
     if a.cmd == 'show':
