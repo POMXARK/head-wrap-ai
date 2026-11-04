@@ -26,6 +26,18 @@ TEX = 256
 SHRINK = (0.97, 0.8)  # the slit is a little smaller than the opening read from the view: the lid rim covers its edge
 
 
+def look_ahead(out, okm):
+    """The Qwen face looks aside: the iris (the darkest part of the opening, near the middle of the ball) is rolled to the
+    front pole of the texture, so both eyes look straight ahead (ours)."""
+    h, w = okm.shape
+    g = out.mean(2)
+    ys, xs = np.where(okm)
+    dark = g[ys, xs] <= np.percentile(g[ys, xs], 15)
+    cy, cx = ys[dark].mean(), xs[dark].mean()
+    dy, dx = 0, int(round(w / 2 - cx))  # only sideways: a vertical roll brings the lid shadow into the eye
+    return np.roll(np.roll(out, dx, axis=1), dy, axis=0)
+
+
 def drop_mask(W, F, polys):
     drop = np.zeros(len(F), bool)
     for p in polys.values():
@@ -95,6 +107,7 @@ def eyeball(poly, W, view, lo, hi):
     from scipy import ndimage as ndi
     iy, ix = ndi.distance_transform_edt(~okm, return_distances=False, return_indices=True)
     out = out[iy, ix]
+    out = look_ahead(out, okm)
     tex = Image.fromarray(out.clip(0, 255).astype(np.uint8))
     faces = []
     for j in range(N_LAT):
