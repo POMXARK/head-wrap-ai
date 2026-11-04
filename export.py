@@ -2,6 +2,7 @@
 """Stage 8: one glb from the layers: export.py wrapped.obj template.obj baked.png out.glb [--ponytail tube.obj hair.png] [--slit eye_open.json front.png target.glb]
 The head keeps the constant UV of the template (the texture is baked into it); the ponytail is a second mesh with its own
 material. Vertices are split per (v, vt) pair by hand, the order of the template is kept."""
+import os
 import sys
 import numpy as np
 import trimesh
@@ -45,17 +46,19 @@ def smooth_pits(W, F, polys):  # sys.argv[1] is the wrapped obj
     # harmonic fill: the free vertices take the mean of their neighbours, the vertices round the pit stay (exact solve)
     import scipy.sparse as sp
     from scipy.sparse.linalg import spsolve
-    pos = {v: k for k, v in enumerate(idx)}
-    A = sp.lil_matrix((len(idx), len(idx)))
-    b = np.zeros(len(idx))
-    for k, v in enumerate(idx):
-        A[k, k] = len(nb[v])
-        for j in nb[v]:
-            if j in pos:
-                A[k, pos[j]] -= 1
-            else:
-                b[k] += W[j, 2]
-    W[idx, 2] = spsolve(A.tocsr(), b)
+    # biharmonic (min of |L z|^2, L = uniform Laplacian): the plate meets the cheek with the same slope, no crease
+    n = len(W)
+    rows, cols = [], []
+    for i in range(n):
+        for j in nb[i]:
+            rows.append(i)
+            cols.append(j)
+    Adj = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
+    Lp = sp.diags(np.asarray(Adj.sum(1)).ravel()) - Adj
+    LtL = (Lp.T @ Lp).tocsr()
+    fixed = np.setdiff1d(np.arange(n), idx)
+    rhs = -LtL[idx][:, fixed] @ W[fixed, 2]
+    W[idx, 2] = spsolve(LtL[idx][:, idx].tocsc(), rhs)
     FREE.clear()
     FREE.update(int(i) for i in idx)
     print('pit vertices smoothed', len(idx), 'max shift', float(abs(W[idx, 2] - np.array(read_v(sys.argv[1]))[idx, 2]).max()))
@@ -109,7 +112,7 @@ def under_eye_mask(W, vt, F, drop, polys, tex):
     print('under-eye texels painted over', int((mask > 0).sum()))
     inp = lama_fill(img, mask).astype(float)
     # feathered edge: no round spot where the painted area ends
-    a = cv2.GaussianBlur(cv2.dilate(mask, np.ones((9, 9), np.uint8)).astype(float) / 255, (0, 0), 9)[..., None]
+    a = cv2.GaussianBlur(cv2.dilate(mask, np.ones((5, 5), np.uint8)).astype(float) / 255, (0, 0), 18)[..., None]
     return Image.fromarray((inp * a + img * (1 - a)).clip(0, 255).astype(np.uint8))
 
 
@@ -117,7 +120,7 @@ def fit_uv(W, vt, F):
     """The UV of the pit vertices from the skin round them (ours): the template UV of the old eye socket is cramped (a
     few texels over the whole dish: blocks of magnified texture). The UV of the vertices outside the pit, a quadratic
     in (x, y) fitted to them (robust), is taken over the pit: the dish shows the face texture at its true scale."""
-    if not FREE:
+    if not FREE or os.environ.get('EYE_DBG') == 'nofit':
         return vt, F
     uvs = {}
     for f in F:
@@ -156,7 +159,7 @@ def obj_mesh(vpath, tpath, tex, polys=None, W=None):
         import eye_slit
         drop = eye_slit.drop_mask(W, F, polys)
         print('slit: faces dropped', int(drop.sum()))
-        under = under_eye_mask(W, vt, F, drop, polys, tex)
+        under = None if os.environ.get('EYE_DBG') == 'nounder' else under_eye_mask(W, vt, F, drop, polys, tex)
         F = [f for f, d in zip(F, drop) if not d]
     pairs, idx, faces = {}, [], []
     for f in F:
