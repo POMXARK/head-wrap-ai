@@ -58,11 +58,28 @@ def run(step, model='hero1'):
 
 def variants():
     d = os.path.join(WORK, 'variants')
-    return sorted(f[:-4] for f in os.listdir(d) if f.endswith('.glb')) if os.path.isdir(d) else []
+    out = []
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if f.endswith('.glb'):
+            try:
+                info = json.load(open(os.path.join(d, f[:-4] + '.json')))
+            except (OSError, ValueError):
+                info = {}
+            out.append({'name': f[:-4], 'eye': info.get('eye'), 'mesh': info.get('mesh'), 'options': info.get('options', {})})
+    return out
+
+
+def _score(cmd, out):
+    p = os.path.join(WORK, out)
+    try:
+        subprocess.run([sys.executable] + cmd + ['--json', 'work/' + out], cwd=HERE, capture_output=True, timeout=120)
+        return json.load(open(p)).get('score')
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def save_variant(name):
-    """Copy the built head (and the options it was built with) under a name: compare several in the 3D view."""
+    """Copy the built head under a name with the options and both scores: compare several, side by side in 3D."""
     import re
     import options
     name = re.sub(r'[^0-9A-Za-zА-Яа-я_-]+', '_', name or '').strip('_') or time.strftime('%H%M%S')
@@ -72,7 +89,10 @@ def save_variant(name):
     d = os.path.join(WORK, 'variants')
     os.makedirs(d, exist_ok=True)
     shutil.copy(src, os.path.join(d, name + '.glb'))
-    json.dump(options.load(), open(os.path.join(d, name + '.json'), 'w'), indent=1)
+    info = {'options': options.load(),
+            'eye': _score(['eye_score.py', 'work/variants/%s.glb' % name, 'work/eye_open.json'], 'var_eye.json'),
+            'mesh': _score(['mesh_score.py', 'work/variants/%s.glb' % name], 'var_mesh.json')}
+    json.dump(info, open(os.path.join(d, name + '.json'), 'w'), indent=1)
     return name, None
 
 
@@ -109,11 +129,13 @@ table.btns td{text-align:left;border:0;font-size:14px}td,th{border:1px solid #bb
 <div id=opts></div><button onclick="saveOpts()" title="Записать настройки в work/options.json">Сохранить настройки</button><button onclick="resetOpts()" title="Вернуть все значения по умолчанию">По умолчанию</button><span id=os class=ok></span>
 <h3>Варианты головы</h3>
 <input id=vn placeholder="имя варианта" size=18> <button onclick="saveVar()" title="Скопировать собранную голову и текущие настройки под этим именем">Сохранить вариант</button>
-Показать в 3D: <select id=vs onchange="showVar()"><option value="">текущая сборка</option></select>
+<div id=vt class=h></div>
+Слева: <select id=vs onchange="showVar()"><option value="">текущая сборка</option></select>
+Справа (сравнить): <select id=vs2 onchange="showVar()"><option value="">— не сравнивать —</option></select>
 <h3>Журнал</h3><pre id=lg></pre>
 <div class=row><div><h3>Оценка глаз по мешам</h3><div id=sc>нет данных — нажмите «Оценка глаз»</div><br><img id=im hidden><h3>Оценка сетки (профиль)</h3><img id=mi hidden onerror="this.hidden=true"></div>
-<div><h3>Голова (3D)</h3><model-viewer id=mv camera-controls auto-rotate shading-intensity=1 exposure=1.1></model-viewer>
-<div id=mvn class=h></div></div></div>
+<div><h3>Голова (3D)</h3><div style="display:flex;gap:6px"><div style="flex:1"><model-viewer id=mv camera-controls auto-rotate shading-intensity=1 exposure=1.1></model-viewer><div id=mvn class=h></div></div>
+<div style="flex:1" id=b2 hidden><model-viewer id=mv2 camera-controls auto-rotate shading-intensity=1 exposure=1.1></model-viewer><div id=mvn2 class=h></div></div></div></div></div>
 <script type=module src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 <script>
 const $=i=>document.getElementById(i);let glbT=0;
@@ -133,7 +155,8 @@ function collect(){const r={};for(const o of OPT.schema){const e=$('o_'+o.name);
 async function saveOpts(){await fetch('/api/options',{method:'POST',body:JSON.stringify(collect())});$('os').textContent=' сохранено';setTimeout(()=>$('os').textContent='',2000)}
 async function resetOpts(){await fetch('/api/options',{method:'POST',body:JSON.stringify({reset:1})});loadOpts()}
 async function saveVar(){await saveOpts();const r=await (await fetch('/api/variant',{method:'POST',body:JSON.stringify({name:$('vn').value})})).json();if(r.error)alert(r.error);else{$('vn').value='';poll()}}
-function showVar(){const v=$('vs').value;$('mv').src='/api/file?f='+(v?'work/variants/'+v+'.glb':'work/hero1_eye.glb')+'&t='+Date.now();$('mvn').textContent=v||'текущая сборка'}
+function showVar(){const v=$('vs').value,w=$('vs2').value;const u=x=>'/api/file?f='+(x?'work/variants/'+x+'.glb':'work/hero1_eye.glb')+'&t='+Date.now();
+$('mv').src=u(v);$('mvn').textContent=v||'текущая сборка';$('b2').hidden=!w;if(w){$('mv2').src=u(w);$('mvn2').textContent=w}}
 async function poll(){const s=await (await fetch('/api/run')).json();
 $('st').textContent=s.running?('идёт: '+s.running+' …'):(s.rc==null?'':(s.rc==0?'готово':'код '+s.rc));$('st').className=s.rc==0?'ok':'';
 $('lg').textContent=s.lines.join('\\n');$('lg').scrollTop=1e9;
@@ -142,6 +165,8 @@ if(s.has_png){$('im').hidden=false;$('im').src='/api/img?p=work/eye_score.png&t=
 if(!s.running&&s.rc===0&&window.mT!=s.lines.length){window.mT=s.lines.length;$('mi').hidden=false;$('mi').src='/api/img?p=work/mesh_score.png&t='+Date.now()}
 if(s.variants)vars(s.variants);
 if(s.glb&&!s.running&&!$('vs').value){const t=s.rc+'|'+s.lines.length;if(t!=glbT){glbT=t;$('mv').src='/api/file?f='+s.glb+'&t='+Date.now();$('mvn').textContent=s.glb}}}
-function vars(l){const s=$('vs'),cur=s.value;if(s.options.length==l.length+1)return;s.innerHTML='<option value="">текущая сборка</option>'+l.map(x=>'<option>'+x+'</option>').join('');s.value=cur}
+function vars(l){const names=l.map(x=>x.name).join();if(window.vN===names)return;window.vN=names;
+for(const [id,first] of [['vs','текущая сборка'],['vs2','— не сравнивать —']]){const s=$(id),cur=s.value;s.innerHTML='<option value="">'+first+'</option>'+l.map(x=>'<option value="'+x.name+'">'+x.name+' (глаза '+(x.eye==null?'?':Math.round(x.eye))+', сетка '+(x.mesh==null?'?':Math.round(x.mesh))+')</option>').join('');s.value=cur}
+$('vt').innerHTML=l.length?'<table><tr><th>вариант</th><th>глаза</th><th>сетка</th><th>что отличалось от умолчаний</th></tr>'+l.map(x=>'<tr><th>'+x.name+'</th><td>'+(x.eye==null?'?':Math.round(x.eye))+'</td><td>'+(x.mesh==null?'?':Math.round(x.mesh))+'</td><td style="text-align:left">'+Object.keys(x.options||{}).filter(k=>OPT&&OPT.schema.some(o=>o.name==k&&o.default!==x.options[k])).map(k=>k+'='+x.options[k]).join(', ')+'</td></tr>').join('')+'</table>':''}
 setInterval(poll,2000);loadOpts();poll()
 </script>"""
