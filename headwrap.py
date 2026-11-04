@@ -107,7 +107,7 @@ def status():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('cmd', choices=['status', 'texture', 'build', 'game', 'all'])
-    ap.add_argument('--from', dest='first', type=int, default=0, help='texture: first step number (0..5), always runs')
+    ap.add_argument('--from', dest='first', type=int, default=0, help='texture: first step number (0..7), always runs')
     ap.add_argument('--model', default='hero')
     a = ap.parse_args()
     if a.cmd == 'status':
