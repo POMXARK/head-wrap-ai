@@ -16,6 +16,7 @@ UNDER_SCALE = 2.2  # the opening of the eye is taken this much bigger for the fa
 PIT_SCALE = 3.0  # the pit round the eye is smoothed within this many times the opening
 BROW_FADE = (0.1, 0.7)  # above the eye top: the pit fill fades out between these heights of the eye (full -> none): the brows stay original
 BROW_GAP = 99  # the pit is filled up to the top of the eye plus this of its height: the brows stay as they were
+FIT_MAX = 0.15  # largest UV distance a pit vertex may be moved by the refit (the islands of the atlas are further apart)
 PIT_RINGS = 6  # rings of vertices round the pit that are filled with it
 WEIGHT = {}  # the weight of the pit fill per vertex (1 at the eye, 0 up at the brows)
 FREE = set()  # the vertices of the pits (smooth_pits): their UV is refitted from the skin round them (fit_uv)
@@ -156,6 +157,8 @@ def fit_uv(W, vt, F):
         x, y = W[v, 0], W[v, 1]
         fit = np.array([1, x, y, x * x, x * y, y * y]) @ C
         for u in uvs[v]:  # the weight blends the fit with the own UV of the vertex: no change at the brows
+            if np.linalg.norm(fit - np.asarray(base[u])) > FIT_MAX:
+                continue  # the vertex sits in another island (the old socket): the fit would stretch its faces across the atlas
             new[(v, u)] = len(vt)
             vt.append(WEIGHT.get(v, 1.0) * fit + (1 - WEIGHT.get(v, 1.0)) * np.asarray(base[u]))
     F = [[(v, new.get((v, u), u)) for v, u in f] for f in F]
