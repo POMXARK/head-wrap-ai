@@ -4,6 +4,8 @@ bake.py target.glb wrapped.obj template/head.obj out.png [--size 2048]
 Every texel of the template UV -> point on the wrapped template -> nearest point of the target -> colour of the
 target texture there. (Next: the best view per texel and the region classes, see docs/plan.md, stage 4.)"""
 import argparse
+import os
+import sys
 import numpy as np
 import trimesh
 from PIL import Image
@@ -54,6 +56,7 @@ def main():
     ap.add_argument('template')
     ap.add_argument('out')
     ap.add_argument('--size', type=int, default=2048)
+    ap.add_argument('--front', help='Qwen front view: texels facing the front take its pixel (sharper, the real eye)')
     a = ap.parse_args()
     tgt = trimesh.load(a.target, force='mesh')
     tex = np.asarray(tgt.visual.material.baseColorTexture.convert('RGB'))
@@ -115,6 +118,20 @@ def main():
     row = np.clip(S - 1 - px[:, 1], 0, S - 1)  # template v up -> image row down
     img[row, np.clip(px[:, 0], 0, S - 1)] = col
     cov[row, np.clip(px[:, 0], 0, S - 1)] = True
+    if a.front:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'corsairs-remake', 'tools'))
+        import pdm_project_views as pv
+        f, (x0, x1, y0, y1), inner = pv.load_view(a.front)
+        lo, hi = tgt.vertices.min(0), tgt.vertices.max(0)
+        wgt = np.clip((N[:, 2] - 0.5) / 0.35, 0, 1)  # facing the front camera
+        qx = np.clip((x0 + (P[:, 0] - lo[0]) / (hi[0] - lo[0]) * (x1 - x0)).astype(int), 0, f.shape[1] - 1)
+        qy = np.clip((y1 - (P[:, 1] - lo[1]) / (hi[1] - lo[1]) * (y1 - y0)).astype(int), 0, f.shape[0] - 1)
+        ok = inner[qy, qx]  # only inside the figure (not the blended rim)
+        wgt = wgt * ok
+        q = f[qy, qx]
+        col = (col * (1 - wgt[:, None]) + q * wgt[:, None]).astype(np.uint8)
+        img[row, np.clip(px[:, 0], 0, S - 1)] = col
+        print('texels from the front view', int((wgt > 0.5).sum()))
     Image.fromarray(img).save(a.out)
     print('texels', int(cov.sum()), 'of', S * S, '->', a.out)
 

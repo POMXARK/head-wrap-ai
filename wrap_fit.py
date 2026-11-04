@@ -72,6 +72,9 @@ def main():
     if len(sys.argv) > 4:  # landmarks.json of landmarks.py targets (lower lids dropped: the ray hits the bottom of the pit)
         t = {k: v for k, v in json.load(open(sys.argv[4])).items() if k not in ('lid_r_low', 'lid_l_low')}
         lm = (np.array([v['vertex'] for v in t.values()]), np.array([v['target'] for v in t.values()]))
+        for n, i in zip(t, range(len(t))):  # eyes: x, y only, z of the ray falls into the pit - keep the z of the template
+            if n.startswith(('eye_', 'lid_')):
+                lm[1][i][2] = sim.vertices[lm[0][i]][2]
         print('landmarks', len(t))
     out = nonrigid(tgt, sim, free_weights(tpl), lm)
     ev = read_v('template/eyes.obj')
