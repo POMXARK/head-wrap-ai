@@ -55,7 +55,7 @@ STEPS = [  # (name, output, inputs, command)
      lambda: run('python3', 'lama_seam.py', w('pad28n.png'), TPL, REG, w('baked28l.png'))),
     ('lama_patch', 'baked28m.png', ['baked28l.png'],
      lambda: run('python3', 'lama_patch.py', w('baked28l.png'), w('baked28m.png'), *PATCHES)),
-    ('neckblur', 'baked28b.png', ['baked28m.png'],
+    ('neckblur', 'baked28b.png', ['baked28m.png', 'options.json'],
      lambda: run('python3', 'neckblur.py', w('baked28m.png'), TPL, REG, w('baked28b.png'))),
     ('pad_final', 'baked29.png', ['baked28b.png'],
      lambda: run('python3', 'padedge.py', w('baked28b.png'), TPL, w('baked29.png'), 24)),

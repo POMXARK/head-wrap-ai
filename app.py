@@ -193,6 +193,9 @@ class H(BaseHTTPRequestHandler):
         elif path == '/api/run':
             import pipeline
             self.send(pipeline.state())
+        elif path == '/api/options':
+            import options
+            self.send({'schema': options.schema(), 'values': options.load()})
         elif path == '/api/file':  # a built .glb of this folder for the 3D view
             f = os.path.realpath(os.path.join(HERE, urllib.parse.parse_qs(q).get('f', [''])[0]))
             if not f.startswith(HERE + os.sep) or not f.endswith('.glb') or not os.path.isfile(f):
@@ -288,6 +291,21 @@ class H(BaseHTTPRequestHandler):
             acc = review.vote(int(d['id']), d['choice'], d.get('note', ''))
             log(f"выбор по паре {d['id']}: {d['choice']}; оценщик, точность на выборах: {acc}")
             self.send({'ok': True, 'acc': acc})
+            return
+        if self.path == '/api/options':
+            import options
+            j = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            if j.get('reset'):
+                j = dict(options.DEFAULTS)
+            log('настройки конвейера: %s' % j)
+            self.send({'values': options.save(j)})
+            return
+        if self.path == '/api/variant':
+            import pipeline
+            j = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            name, err = pipeline.save_variant(j.get('name'))
+            log('вариант головы: %s' % (name or err))
+            self.send({'name': name, 'error': err})
             return
         if self.path == '/api/run':
             import pipeline

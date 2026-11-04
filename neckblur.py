@@ -12,15 +12,20 @@ from PIL import Image, ImageDraw
 from scipy import ndimage as ndi
 from skimage import color
 import bake
+import options
 
 Y0, Y1 = 6.35, 6.75
 LSKIN = 38.0
-SIGMA = 2.2
+SIGMA = options.get('NECKBLUR_SIGMA')
 FEATHER = 4
 
 
 def main():
     src, tpl, reg, dst = sys.argv[1:5]
+    if not options.get('NECKBLUR'):
+        Image.open(src).save(dst)
+        print('neckblur off: copied')
+        return
     t = np.array(Image.open(src).convert('RGB'))
     S = t.shape[0]
     r = json.load(open(reg))

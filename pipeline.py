@@ -8,6 +8,8 @@ import os
 import subprocess
 import sys
 import threading
+import shutil
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK = os.path.join(HERE, 'work')
@@ -54,6 +56,26 @@ def run(step, model='hero1'):
     return None
 
 
+def variants():
+    d = os.path.join(WORK, 'variants')
+    return sorted(f[:-4] for f in os.listdir(d) if f.endswith('.glb')) if os.path.isdir(d) else []
+
+
+def save_variant(name):
+    """Copy the built head (and the options it was built with) under a name: compare several in the 3D view."""
+    import re
+    import options
+    name = re.sub(r'[^0-9A-Za-zА-Яа-я_-]+', '_', name or '').strip('_') or time.strftime('%H%M%S')
+    src = os.path.join(WORK, 'hero1_eye.glb')
+    if not os.path.exists(src):
+        return None, 'сначала соберите голову'
+    d = os.path.join(WORK, 'variants')
+    os.makedirs(d, exist_ok=True)
+    shutil.copy(src, os.path.join(d, name + '.glb'))
+    json.dump(options.load(), open(os.path.join(d, name + '.json'), 'w'), indent=1)
+    return name, None
+
+
 def state():
     out = {'running': STATE['running'], 'rc': STATE['rc'], 'lines': STATE['lines'][-200:]}
     try:
@@ -61,6 +83,7 @@ def state():
     except (OSError, ValueError):
         out['eyes'] = None
     out['glb'] = 'work/hero1_eye.glb' if os.path.exists(os.path.join(WORK, 'hero1_eye.glb')) else None
+    out['variants'] = variants()
     out['has_png'] = os.path.exists(os.path.join(WORK, 'eye_score.png'))
     return out
 
@@ -69,7 +92,7 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=
 <style>body{font:14px sans-serif;margin:16px;max-width:1200px}button{font-size:14px;padding:6px 12px;margin:2px}
 pre{background:#111;color:#ccc;padding:8px;height:260px;overflow:auto;font-size:12px}table{border-collapse:collapse;font-size:12px}
 table.btns td{text-align:left;border:0;font-size:14px}td,th{border:1px solid #bbb;padding:2px 6px;text-align:right}.bad{background:#fcc}.ok{color:#080}.row{display:flex;gap:16px;flex-wrap:wrap}
-.row>div{flex:1;min-width:340px}img{max-width:100%;border:1px solid #888}model-viewer{width:100%;height:380px;background:#ddd}</style>
+.row>div{flex:1;min-width:340px}img{max-width:100%;border:1px solid #888}#opts label{display:block;margin:4px 0}#opts .d{color:#666;font-size:12px;margin-left:24px}.h{color:#555;font-size:12px}model-viewer{width:100%;height:380px;background:#ddd}</style>
 <a href="/">&larr; head-wrap-ai</a><h2>Конвейер головы</h2>
 <p>Голова собирается из готовых промежуточных файлов (<code>work/</code>) шагами сверху вниз. Кнопки запускают ровно эти шаги; результат — файл <code>work/hero1_eye.glb</code>, он же показан справа в 3D.</p>
 <table class=btns>
@@ -81,6 +104,12 @@ table.btns td{text-align:left;border:0;font-size:14px}td,th{border:1px solid #bb
 <tr><td>Модель: <select id=mdl title='Для какой модели игры собрать голову: hero или hero1'><option>hero1</option><option>hero</option></select> <button title="Положить голову в игру для выбранной модели и снять рендеры. Перезаписывает файлы игры." onclick="go('game')">В игру</button></td><td>Положить собранную голову в игру для выбранной модели (hero или hero1) и снять рендеры. Перезаписывает файлы игры.</td></tr>
 <tr><td><button title="Собрать, затем в игру, затем рендер — одним нажатием." onclick="go('all')">Всё</button></td><td>Собрать → в игру → рендер одним нажатием.</td></tr>
 </table><div><span id=st></span></div>
+<h3>Настройки (вы выбираете)</h3>
+<p class=h>Настройки хранятся в <code>work/options.json</code>. Изменили «сглаживание шеи» — нажмите «Текстура», потом «Собрать голову»; остальные действуют после «Собрать голову». Затем «Сохранить вариант», чтобы сравнить результаты в 3D.</p>
+<div id=opts></div><button onclick="saveOpts()" title="Записать настройки в work/options.json">Сохранить настройки</button><button onclick="resetOpts()" title="Вернуть все значения по умолчанию">По умолчанию</button><span id=os class=ok></span>
+<h3>Варианты головы</h3>
+<input id=vn placeholder="имя варианта" size=18> <button onclick="saveVar()" title="Скопировать собранную голову и текущие настройки под этим именем">Сохранить вариант</button>
+Показать в 3D: <select id=vs onchange="showVar()"><option value="">текущая сборка</option></select>
 <h3>Журнал</h3><pre id=lg></pre>
 <div class=row><div><h3>Оценка глаз по мешам</h3><div id=sc>нет данных — нажмите «Оценка глаз»</div><br><img id=im hidden><h3>Оценка сетки (профиль)</h3><img id=mi hidden onerror="this.hidden=true"></div>
 <div><h3>Голова (3D)</h3><model-viewer id=mv camera-controls auto-rotate shading-intensity=1 exposure=1.1></model-viewer>
@@ -95,12 +124,24 @@ const D={visible:'видимая доля заплатки глаза (мень�
 let h='<b>score '+Math.round(e.score)+'/100</b><table><tr><th>вид</th>'+ks.map(k=>'<th title="'+D[k]+'">'+k+'</th>').join('')+'</tr>';
 for(const v in e.views){h+='<tr><th>'+v+'</th>'+ks.map(k=>{const x=e.views[v][k],t=T[k];const bad=t&&(x<t[0]||x>t[1]);return '<td class="'+(bad?'bad':'')+'">'+(+x).toFixed(3)+'</td>'}).join('')+'</tr>'}
 return h+'</table>'}
+let OPT=null;
+async function loadOpts(){OPT=await (await fetch('/api/options')).json();let h='';
+for(const o of OPT.schema){const v=OPT.values[o.name];
+h+='<label title="'+o.desc+'">'+(o.kind=='bool'?'<input type=checkbox id="o_'+o.name+'" '+(v?'checked':'')+'> ':'<input type=number id="o_'+o.name+'" value="'+v+'" min="'+o.min+'" max="'+o.max+'" step="'+o.step+'" style="width:70px"> ')+'<b>'+o.label+'</b><div class=d>'+o.desc+(o.default!==undefined?' (по умолчанию: '+(o.kind=='bool'?(o.default?'да':'нет'):o.default)+')':'')+'</div></label>'}
+$('opts').innerHTML=h}
+function collect(){const r={};for(const o of OPT.schema){const e=$('o_'+o.name);r[o.name]=o.kind=='bool'?e.checked:+e.value}return r}
+async function saveOpts(){await fetch('/api/options',{method:'POST',body:JSON.stringify(collect())});$('os').textContent=' сохранено';setTimeout(()=>$('os').textContent='',2000)}
+async function resetOpts(){await fetch('/api/options',{method:'POST',body:JSON.stringify({reset:1})});loadOpts()}
+async function saveVar(){await saveOpts();const r=await (await fetch('/api/variant',{method:'POST',body:JSON.stringify({name:$('vn').value})})).json();if(r.error)alert(r.error);else{$('vn').value='';poll()}}
+function showVar(){const v=$('vs').value;$('mv').src='/api/file?f='+(v?'work/variants/'+v+'.glb':'work/hero1_eye.glb')+'&t='+Date.now();$('mvn').textContent=v||'текущая сборка'}
 async function poll(){const s=await (await fetch('/api/run')).json();
 $('st').textContent=s.running?('идёт: '+s.running+' …'):(s.rc==null?'':(s.rc==0?'готово':'код '+s.rc));$('st').className=s.rc==0?'ok':'';
 $('lg').textContent=s.lines.join('\\n');$('lg').scrollTop=1e9;
 if(s.eyes){$('sc').innerHTML=table(s.eyes)}
 if(s.has_png){$('im').hidden=false;$('im').src='/api/img?p=work/eye_score.png&t='+(s.eyes?Math.round(s.eyes.score*1000):0)}
 if(!s.running&&s.rc===0&&window.mT!=s.lines.length){window.mT=s.lines.length;$('mi').hidden=false;$('mi').src='/api/img?p=work/mesh_score.png&t='+Date.now()}
-if(s.glb&&!s.running){const t=s.rc+'|'+s.lines.length;if(t!=glbT){glbT=t;$('mv').src='/api/file?f='+s.glb+'&t='+Date.now();$('mvn').textContent=s.glb}}}
-setInterval(poll,2000);poll()
+if(s.variants)vars(s.variants);
+if(s.glb&&!s.running&&!$('vs').value){const t=s.rc+'|'+s.lines.length;if(t!=glbT){glbT=t;$('mv').src='/api/file?f='+s.glb+'&t='+Date.now();$('mvn').textContent=s.glb}}}
+function vars(l){const s=$('vs'),cur=s.value;if(s.options.length==l.length+1)return;s.innerHTML='<option value="">текущая сборка</option>'+l.map(x=>'<option>'+x+'</option>').join('');s.value=cur}
+setInterval(poll,2000);loadOpts();poll()
 </script>"""

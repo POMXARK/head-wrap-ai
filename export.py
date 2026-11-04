@@ -8,18 +8,19 @@ import numpy as np
 import trimesh
 from PIL import Image
 from bake import read_v, read_uv_faces
+import options
 
 
-UNDER_SCALE = 2.2  # the opening of the eye is taken this much bigger for the faces of the lower lid
+UNDER_SCALE = options.get('UNDER_SCALE')  # default 2.2  # the opening of the eye is taken this much bigger for the faces of the lower lid
 
 
 PIT_SCALE = 3.0  # the pit round the eye is smoothed within this many times the opening
 BROW_FADE = (0.1, 0.7)  # above the eye top: the pit fill fades out between these heights of the eye (full -> none): the brows stay original
 BROW_GAP = 99  # the pit is filled up to the top of the eye plus this of its height: the brows stay as they were
-FIT_MAX = 0.15  # largest UV distance a pit vertex may be moved by the refit (the islands of the atlas are further apart)
-PIT_RINGS = 6  # rings of vertices round the pit that are filled with it
+FIT_MAX = options.get('FIT_MAX')  # default 0.15  # largest UV distance a pit vertex may be moved by the refit (the islands of the atlas are further apart)
+PIT_RINGS = options.get('PIT_RINGS')  # default 6  # rings of vertices round the pit that are filled with it
 WEIGHT = {}  # the weight of the pit fill per vertex (1 at the eye, 0 up at the brows)
-PLATE_BLUR = 3.0
+PLATE_BLUR = options.get('PLATE_BLUR')
 PLATE = []  # (own UV, fitted UV) of the triangles whose vertices keep the cramped UV of the old socket (fit_uv): their texels are repainted (paint_plate)
 FREE = set()  # the vertices of the pits (smooth_pits): their UV is refitted from the skin round them (fit_uv)
 PIT_Z = 0.32  # vertices of the face behind this depth under the eye are the floor of the pit
@@ -232,9 +233,9 @@ def obj_mesh(vpath, tpath, tex, polys=None, W=None):
         import eye_slit
         drop = eye_slit.drop_mask(W, F, polys)
         print('slit: faces dropped', int(drop.sum()))
-        under = None if os.environ.get('EYE_DBG') == 'nounder' else under_eye_mask(W, vt, F, drop, polys, tex)
+        under = None if (os.environ.get('EYE_DBG') == 'nounder' or not options.get('UNDER')) else under_eye_mask(W, vt, F, drop, polys, tex)
         F = [f for f, d in zip(F, drop) if not d]
-        if PLATE and os.environ.get('EYE_DBG') != 'noplate':
+        if PLATE and options.get('PLATE') and os.environ.get('EYE_DBG') != 'noplate':
             under = paint_plate(under or Image.open(tex))
     pairs, idx, faces = {}, [], []
     for f in F:
@@ -277,7 +278,7 @@ def main():
     Wp = None
     if polys:
         Wp = read_v(a[0])
-        Wp = smooth_pits(Wp, read_uv_faces(a[1])[1], polys) if '--no-fold' not in a else Wp
+        Wp = smooth_pits(Wp, read_uv_faces(a[1])[1], polys) if '--no-fold' not in a and options.get('FOLD') else Wp
     sc.add_geometry(obj_mesh(a[0], a[1], a[2], polys, Wp), node_name='head')
     if polys:
         W = Wp
