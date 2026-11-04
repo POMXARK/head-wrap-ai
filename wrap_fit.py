@@ -5,6 +5,7 @@ The eyes are not touched here (rigid move with the head frame is done by the cal
 import sys
 import numpy as np
 import trimesh
+import regions
 from bake import read_mesh, read_v, write_v
 from trimesh import registration as reg
 
@@ -26,17 +27,12 @@ def fit(target, tpl, iters=30):
     return out, M, cost
 
 
-def free_weights(tpl_base, eyes_path='template/eyes.obj', r_eye=0.55):
+def free_weights(tpl_base, eyes_path='template/eyes.obj'):
     """vertex weights of the template (base units, before the similarity move): 0 = not pulled to the target, only the
-    stiffness moves the vertex with its neighbours (eyelids, ears: the target has a pit and a flat leaf there)"""
-    ev = read_v(eyes_path)
-    c = [ev[ev[:, 0] > 0].mean(0), ev[ev[:, 0] < 0].mean(0)]
-    V = tpl_base.vertices
-    w = np.ones(len(V))
-    for e in c:
-        w[np.linalg.norm(V - e, axis=1) < r_eye] = 0
-    w[(np.abs(V[:, 0]) > 1.05) & (V[:, 1] > 6.4) & (V[:, 1] < 7.6) & (V[:, 2] < 0.9)] = 0
-    return w
+    stiffness moves the vertex with its neighbours (eyelids, ears: the target has a pit and a flat leaf there);
+    the regions are those of regions.py"""
+    r = regions.classify(tpl_base.vertices, read_v(eyes_path))
+    return np.where((r == 1) | (r == 2), 0., 1.)
 
 
 def nonrigid(target, tpl, weights=None):
@@ -71,7 +67,7 @@ def main():
     ne = ev @ M[:3, :3].T + M[:3, 3]
     for sgn in (1, -1):  # each eye follows the mean shift of the eyelid vertices around it
         side = sgn * ev[:, 0] > 0
-        near = np.linalg.norm(tpl.vertices - ev[side].mean(0), axis=1) < 0.55
+        near = np.linalg.norm(tpl.vertices - ev[side].mean(0), axis=1) < regions.EYE_R
         ne[side] += (out.vertices[near] - sim.vertices[near]).mean(0)
     write_v('template/eyes.obj', sys.argv[3].replace('.obj', '_eyes.obj'), ne)
     d = tgt.nearest.on_surface(out.vertices)[1]
