@@ -69,8 +69,21 @@ def smooth_pits(W, F, polys):  # sys.argv[1] is the wrapped obj
     t = np.clip((W[idx, 1] - top - BROW_FADE[0] * hgt) / ((BROW_FADE[1] - BROW_FADE[0]) * hgt), 0, 1)
     wgt = 1 - t * t * (3 - 2 * t)  # 1 at the eye, 0 at the brows
     W[idx, 2] = wgt * znew + (1 - wgt) * W[idx, 2]
+    # the UV fit fades out towards the rim of the pit too: a quadratic fit extrapolates and meets the real UV with a jump (a scar line)
+    dist = {int(i): 0 for i in fixed if any(free[j] for j in nb[i])}
+    frontier = list(dist)
+    while frontier:
+        nxt = []
+        for i in frontier:
+            for j in nb[i]:
+                if free[j] and j not in dist:
+                    dist[j] = dist[i] + 1
+                    nxt.append(j)
+        frontier = nxt
+    rim = np.array([min(dist.get(int(v), PIT_RINGS * 2) / (PIT_RINGS * 1.5), 1.0) for v in idx])
+    rim = rim * rim * (3 - 2 * rim)
     WEIGHT.clear()
-    WEIGHT.update({int(v): float(x) for v, x in zip(idx, wgt)})
+    WEIGHT.update({int(v): float(x * r) for v, x, r in zip(idx, wgt, rim)})
     FREE.clear()
     FREE.update(int(i) for i in idx)
     print('pit vertices smoothed', len(idx), 'max shift', float(abs(W[idx, 2] - np.array(read_v(sys.argv[1]))[idx, 2]).max()))
