@@ -173,6 +173,8 @@ class H(BaseHTTPRequestHandler):
 
     def send(self, body, ctype='application/json'):
         b = body if isinstance(body, bytes) else (body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)).encode()
+        if ctype == 'text/html':  # interactive guide on every window (tour.js)
+            b += b'<script src="/tour.js"></script>'
         self.send_response(200)
         self.send_header('Content-Type', ctype + '; charset=utf-8')
         self.send_header('Content-Length', str(len(b)))
@@ -252,6 +254,8 @@ class H(BaseHTTPRequestHandler):
                 self.send(jobs.get(urllib.parse.parse_qs(q).get('id', [''])[0]))
             except KeyError:
                 self.send({'error': 'нет такой задачи'})
+        elif path == '/tour.js':
+            self.send(open(os.path.join(HERE, 'tour.js'), 'rb').read(), 'application/javascript')
         elif path == '/edit':
             self.send(open(os.path.join(HERE, 'edit.html'), 'rb').read(), 'text/html')
         elif path == '/model':
