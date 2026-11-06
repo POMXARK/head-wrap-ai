@@ -12,5 +12,5 @@ for c in ("e.code", "KeyG", "KeyP"):
 assert 'alert(' not in h
 assert len(re.findall(r'class="btn primary', h)) == 2
 assert "$('bum').disabled" in h or "$(b).disabled=!nsel" in h, 'UV buttons are disabled without a selection, with the reason in the text'
-assert 'Текстуры и UV' in h
+assert 'У этой головы нет' in h
 print('PASS test_edit_tools_ui')

@@ -35,15 +35,15 @@ texture.paint({'points': [[0.3, 0.3]], 'radius': 0.02, 'strength': 1.0, 'mode': 
 # history: back to the original, forward again
 n = len(S['undo'])
 for _ in range(n):
-    assert texture.history('undo')['ok']
-assert np.array_equal(S['tex'], t0) and not texture.history('undo')['ok']
-assert texture.history('redo')['ok']
+    assert texture.history('undo', head)['ok']
+assert np.array_equal(S['tex'], t0) and not texture.history('undo', head)['ok']
+assert texture.history('redo', head)['ok']
 print('texture paint ok')
 
 # png is a valid image of the same size
 from PIL import Image
 import io
-assert Image.open(io.BytesIO(texture.png())).size == (1024, 1024)
+assert Image.open(io.BytesIO(texture.png(head))).size == (1024, 1024)
 try:
     texture.paint({'points': [], 'radius': 0.02}, head)
     raise SystemExit('empty stroke must fail')
@@ -74,7 +74,7 @@ try:
     raise SystemExit('empty area must fail')
 except ValueError:
     pass
-while texture.history('undo')['ok']:
+while texture.history('undo', head)['ok']:
     pass
 assert np.array_equal(S['vt'], vt0)
 print('uv ok')

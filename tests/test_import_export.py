@@ -61,7 +61,20 @@ print('export ok')
 n0 = len(E.A.parts['head'].V)
 rep = E.replace_head({'donor': fid, 'part': ps[0]['name']})
 assert len(E.A.parts['head'].V) != n0 or True
-assert not E.tex_info()['available'], 'UV belong to the template topology'
+# the imported head brings its own UV and texture: the tools work on it, separately from the template state
+assert E.tex_info()['available']
+h2 = E.A.parts['head']
+st = texture.state_of(h2)
+assert st is not None and st is not texture.state_of.__globals__['S'] and len(st['T']) == len(h2.F)
+assert (st['T'][:len(h2.F) - 5] >= 0).all()
+E.tex_paint({'points': [[0.5, 0.5]], 'radius': 0.02, 'color': [9, 9, 9], 'strength': 1})
+assert E.tex_info()['can_undo']
+E.select({'action': 'clear'})
+E.select({'action': 'brush', 'point': [float(x) for x in h2.V[int(np.argmax(h2.V[:, 2]))]], 'radius': 0.3})
+assert E.uv_xform({'op': 'move', 'du': 0.01})['moved'] > 0
+assert len(E.mesh_uv()['uv']) == 6 * len(h2.F)
+b, _, _ = E.export_bytes('glb')
+assert len(list(trimesh.load(io.BytesIO(b), file_type='glb', force='scene').geometry.values())[0].faces) == len(h2.F)
 E.history('undo')
 assert len(E.A.parts['head'].V) == n0 and E.tex_info()['available']
 # a game model, if the game folder is here

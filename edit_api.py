@@ -119,13 +119,21 @@ def donor_parts(name):
 def _donor(name, part=None):
     rel = _resolve(name)
     if rel is None:
+        import texture
         m = load_obj(os.path.join(HERE, 'template/head_sub.obj'))
-        return m.V, m.F
+        vt, T, tex = texture.template_uv()
+        return m.V, m.F, {'vt': vt, 'T': T, 'img': tex}
     import trimesh
     geoms = trimesh.load(os.path.join(HERE, rel), force='scene').geometry
     g = geoms[part] if part in geoms else (geoms['geometry_0'] if name == 'hero1' else max(geoms.values(), key=lambda x: len(x.vertices)))
     V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
-    return V, inv.ravel()[g.faces]
+    uv = getattr(g.visual, 'uv', None)
+    info = None
+    if uv is not None and len(uv) == len(g.vertices):
+        mat = getattr(g.visual, 'material', None)
+        img = getattr(mat, 'baseColorTexture', None) or getattr(mat, 'image', None)
+        info = {'vt': np.asarray(uv, float), 'T': np.asarray(g.faces, int), 'img': img}
+    return V, inv.ravel()[g.faces], info
 
 
 def save_upload(name, data):
@@ -148,7 +156,7 @@ def export_bytes(fmt, body=False):
     import texture
     h = A.parts['head']
     if fmt == 'png':
-        return texture.png(), 'image/png', 'head_texture.png'
+        return texture.png(h), 'image/png', 'head_texture.png'
     uvok = texture.available(h)
     if fmt == 'obj':
         plain = ('\n'.join('v %.5f %.5f %.5f' % tuple(v) for v in h.V) + '\n' +
@@ -159,10 +167,10 @@ def export_bytes(fmt, body=False):
     import trimesh
     sc = trimesh.Scene()
     if uvok:
-        S = texture._init()
+        S = texture.state_of(h)
         mh = trimesh.Trimesh(h.V[S['F']].reshape(-1, 3), np.arange(3 * len(S['F'])).reshape(-1, 3), process=False)
         mh.visual = trimesh.visual.TextureVisuals(uv=S['vt'][S['T']].reshape(-1, 2), material=trimesh.visual.material.PBRMaterial(
-            baseColorTexture=texture.pil()))
+            baseColorTexture=texture.pil(h)))
     else:
         mh = trimesh.Trimesh(h.V, h.F, process=False)
     sc.add_geometry(mh, node_name='head', geom_name='head')
@@ -181,7 +189,7 @@ def replace_prepare(d, step=lambda msg, frac: None):
         _s(msg, frac)
         time.sleep(slow)
     step('читаю донора', 0.1)
-    dV, dF = _donor(d['donor'], d.get('part'))
+    dV, dF, uvinfo = _donor(d['donor'], d.get('part'))
     body = A.parts['body']
     step('ищу кольца розетки', 0.35)
     bl = RP.boundary_loops(body.F)
@@ -201,7 +209,12 @@ def replace_prepare(d, step=lambda msg, frac: None):
         hF = np.vstack([hF, strip])
         rep['seam_stretch'] = round(stretch, 3)
     step('готово к применению', 0.95)
-    return {'hV': hV, 'hF': hF, 'rep': rep, 'd': d, 'seam': seam}
+    uv = None
+    if uvinfo is not None and np.array_equal(hF[:len(dF)], dF):    # donor faces keep their order; the bridge strip gets a dummy UV
+        vt = np.vstack([uvinfo['vt'], [[0.0, 0.0]]])
+        T = np.vstack([uvinfo['T'], np.full((len(hF) - len(dF), 3), len(uvinfo['vt']), int)])
+        uv = {'vt': vt, 'T': T, 'img': uvinfo['img']}
+    return {'hV': hV, 'hF': hF, 'rep': rep, 'd': d, 'seam': seam, 'uv': uv}
 
 
 def replace_commit(p):
@@ -212,6 +225,9 @@ def replace_commit(p):
                     'seam': seam}, scores={'after': {'ring_gap': round(rep['ring_gap'], 4), 'scale': round(rep['scale'], 4),
                                                      **({'seam_stretch': rep['seam_stretch']} if 'seam_stretch' in rep else {})}})
     DRAFT = Selection(A.parts['head'])
+    if p.get('uv'):
+        import texture
+        texture.register(A.parts['head'], p['uv']['vt'], p['uv']['T'], p['uv']['img'])
     import edit_log
     _IDS.append(edit_log.record('user', 'replace_part', {'donor': d['donor'], 'scale': d.get('scale', 'match_ring'), 'seam': seam}, 0,
                                 {'count': len(A.parts['head'].V), 'centroid': [0, 0, 0], 'bbox': None, 'regions': ['head']},
@@ -403,14 +419,14 @@ def tex_info():
     _init()
     import texture
     ok = texture.available(A.parts['head'])
-    return dict(texture.status(), available=ok)
+    return dict(texture.status(A.parts['head']), available=ok)
 
 
 def tex_paint(d):
     _init()
     import texture
     r = texture.paint(d, A.parts['head'])
-    return dict(r, **texture.status())
+    return dict(r, **texture.status(A.parts['head']))
 
 
 def uv_xform(d):
@@ -419,13 +435,13 @@ def uv_xform(d):
     if not DRAFT.count():
         raise ValueError('Сначала выделите место на модели')
     r = texture.uv_xform(d, A.parts['head'], DRAFT.weights(float(d.get('feather', 0))))
-    return dict(r, **texture.status())
+    return dict(r, **texture.status(A.parts['head']))
 
 
 def tex_history(d):
     _init()
     import texture
-    return dict(texture.history(d['action']), **texture.status())
+    return dict(texture.history(d['action'], A.parts['head']), **texture.status(A.parts['head']))
 
 
 def tex_export(d):

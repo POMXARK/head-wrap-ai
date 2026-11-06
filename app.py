@@ -238,7 +238,7 @@ class H(BaseHTTPRequestHandler):
             import edit_api
             import texture
             with edit_api.LOCK:
-                b = texture.png()
+                b = texture.png(edit_api.A.parts['head'])
             self.send(b, 'image/png')
         elif path == '/api/critic':      # common critic format (C1): ?kind=eye|mesh
             import critics

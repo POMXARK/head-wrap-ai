@@ -1,7 +1,8 @@
-"""Texture and UV editing of the template head (ours): paint on the texture (brush, erase to the original, blur, lighten,
-darken) and move/scale/rotate the UV of the selected area. Works only while the head is the template (the UV belong to its
-topology). One history for both kinds of edits, so one "undo" steps back in the order the edits were made.
-Source: template/head_sub.obj (UV) and work/baked.png (texture); the originals are never overwritten, export goes to work/head_edit.*"""
+"""Texture and UV editing of the head (ours): paint on the texture (brush, erase to the original, blur, lighten,
+darken) and move/scale/rotate the UV of the selected area. Every head topology has its own state (UV, texture, history),
+found by the shape of the faces: the template head, and an imported head that brought UV (register()); a head without UV
+has no state and the tools refuse. One history per state for both kinds of edits.
+Template: template/head_sub.obj (UV) and work/baked.png (texture); originals are never overwritten, export goes to work/head_edit.*"""
 import io
 import os
 import numpy as np
@@ -11,7 +12,12 @@ from scipy import ndimage
 HERE = os.path.dirname(os.path.abspath(__file__))
 OBJ = os.path.join(HERE, 'template/head_sub.obj')
 TEX = os.path.join(HERE, 'work/baked.png')
-S = None
+S = None            # the template state
+REGISTRY = {}       # topology key -> state
+
+
+def _key(head):
+    return (len(head.V), hash(np.ascontiguousarray(head.F).tobytes()))
 
 
 def _init():
@@ -35,55 +41,78 @@ def _init():
     img = np.asarray(Image.open(TEX).convert('RGB'), np.uint8).copy()
     S = {'vt': np.array(vt), 'F': np.array(F), 'T': np.array(T), 'nv': nv, 'tex': img, 'orig': img.copy(), 'undo': [], 'redo': [],
          'rev': 0}
+    REGISTRY[(nv, hash(S['F'].tobytes()))] = S
     return S
+
+
+def register(head, vt, T, img=None):
+    """UV of an imported head: vt (n,2) UV rows, T (faces,3) rows per corner (aligned with head.F), img PIL/array or None (grey)"""
+    _init()
+    if img is None:
+        a = np.full((1024, 1024, 3), 200, np.uint8)
+    else:
+        a = np.asarray(img.convert('RGB') if hasattr(img, 'convert') else img, np.uint8).copy()
+    s = {'vt': np.asarray(vt, float), 'F': np.asarray(head.F).copy(), 'T': np.asarray(T, int), 'nv': len(head.V), 'tex': a,
+         'orig': a.copy(), 'undo': [], 'redo': [], 'rev': 0}
+    REGISTRY[_key(head)] = s
+    return s
+
+
+def template_uv():
+    s = _init()
+    return s['vt'], s['T'], s['tex']
+
+
+def state_of(head):
+    """the state of this head or None"""
+    _init()
+    return REGISTRY.get(_key(head))
 
 
 def reset():
     global S
     S = None
+    REGISTRY.clear()
 
 
 def available(head):
-    s = _init()
-    return len(head.V) == s['nv'] and np.array_equal(head.F, s['F'])
+    return state_of(head) is not None
 
 
 def _need(head):
-    if not available(head):
-        raise ValueError('Текстура и UV есть только у шаблона головы; после замены головы они недоступны')
+    s = state_of(head)
+    if s is None:
+        raise ValueError('У этой головы нет развёртки (UV) и текстуры: они есть у шаблона и у импортированных голов с UV')
+    return s
 
 
-def _push(kind):
-    s = S
+def _push(s, kind):
     s['undo'].append((kind, (s['tex'] if kind == 'tex' else s['vt']).copy()))
     del s['undo'][:-30]
     s['redo'].clear()
     s['rev'] += 1
 
 
-def png():
+def png(head):
     b = io.BytesIO()
-    Image.fromarray(_init()['tex']).save(b, 'PNG')
+    Image.fromarray(_need(head)['tex']).save(b, 'PNG')
     return b.getvalue()
 
 
 def uv_layout(head):
-    s = _init()
-    _need(head)
+    s = _need(head)
     return {'vt': np.round(s['vt'], 5).ravel().tolist(), 'f': s['T'].ravel().tolist(), 'rev': s['rev']}
 
 
 def mesh_uv(head):
     """texture coordinates per face corner (the 3D view needs a non-indexed mesh because UV seams split vertices)"""
-    s = _init()
-    _need(head)
+    s = _need(head)
     return {'uv': np.round(s['vt'][s['T']].reshape(-1), 5).tolist(), 'rev': s['rev']}
 
 
 def paint(d, head):
     """d: {points:[[u,v],..], radius (UV units), strength 0..1, mode paint|erase|blur|lighten|darken, color [r,g,b]}"""
-    s = _init()
-    _need(head)
+    s = _need(head)
     pts = np.asarray(d['points'], float).reshape(-1, 2)
     if not len(pts):
         raise ValueError('нет точек мазка')
@@ -94,7 +123,7 @@ def paint(d, head):
     st = float(d.get('strength', 0.5))
     H, W = s['tex'].shape[:2]
     rp = max(float(d.get('radius', 0.02)) * W, 1.0)
-    _push('tex')
+    _push(s, 'tex')
     for u, v in pts:
         cx, cy = u * W, (1 - v) * H
         x0, x1 = int(max(cx - rp, 0)), int(min(cx + rp + 1, W))
@@ -122,8 +151,7 @@ def paint(d, head):
 def uv_xform(d, head, w):
     """d: {op: move|scale|rotate, du, dv, factor [su,sv] or number, angle (deg)}; w: per-vertex weights of the area.
     Only the UV of the area move (blended by w), pivot = the weighted centre of the area's UV."""
-    s = _init()
-    _need(head)
+    s = _need(head)
     wt = np.zeros(len(s['vt']))
     np.maximum.at(wt, s['T'].ravel(), w[s['F'].ravel()])
     if not (wt > 0).any():
@@ -142,13 +170,13 @@ def uv_xform(d, head, w):
         Q = c + (P - c) @ R.T
     else:
         raise ValueError('unknown uv op ' + str(op))
-    _push('uv')
+    _push(s, 'uv')
     s['vt'] = np.where((wt > 0)[:, None], P + wt[:, None] * (Q - P), P)
     return {'rev': s['rev'], 'moved': int((wt > 0).sum())}
 
 
-def history(action):
-    s = _init()
+def history(action, head):
+    s = _need(head)
     a, b = ('undo', 'redo') if action == 'undo' else ('redo', 'undo')
     if not s[a]:
         return {'ok': False}
@@ -159,18 +187,20 @@ def history(action):
     return {'ok': True, 'kind': kind, 'rev': s['rev']}
 
 
-def status():
-    s = _init()
+def status(head):
+    s = state_of(head)
+    if s is None:
+        return {'can_undo': False, 'can_redo': False, 'rev': 0}
     return {'can_undo': bool(s['undo']), 'can_redo': bool(s['redo']), 'rev': s['rev']}
 
 
-def pil():
-    return Image.fromarray(_init()['tex'])
+def pil(head):
+    return Image.fromarray(_need(head)['tex'])
 
 
 def obj_text(head):
     """OBJ bytes: current vertices, edited UV"""
-    s = _init()
+    s = _need(head)
     out = ['# head with edited UV (head-wrap-ai)']
     out += ['v %.5f %.5f %.5f' % tuple(v) for v in head.V]
     out += ['vt %.5f %.5f' % tuple(t) for t in s['vt']]
@@ -180,8 +210,7 @@ def obj_text(head):
 
 def export(head):
     """work/head_edit.png + work/head_edit.obj (current vertices, edited UV)"""
-    s = _init()
-    _need(head)
+    s = _need(head)
     os.makedirs(os.path.join(HERE, 'work'), exist_ok=True)
     Image.fromarray(s['tex']).save(os.path.join(HERE, 'work/head_edit.png'))
     with open(os.path.join(HERE, 'work/head_edit.obj'), 'wb') as f:

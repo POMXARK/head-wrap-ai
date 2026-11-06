@@ -210,8 +210,8 @@ $('tmg').innerHTML=Object.entries(TM).map(([k,v])=>'<button id="tm-'+k+'" aria-p
 function setTM(m){tmode=m;for(const k in TM)$('tm-'+k).setAttribute('aria-pressed',k==m);$('f-tc').hidden=m!='paint'}
 function sync(){$('info').innerHTML='Выделено: <b>'+nsel+'</b> вершин';$('empty').hidden=nsel>0&&!window.NOGL;$('ba').disabled=!nsel;
  $('why').textContent=nsel?'Изменится только выделенное место и мягкая кромка вокруг.':'Сначала выделите место на модели.';$('bsg').disabled=!nsel;$('bu').disabled=!nops;$('bus').disabled=!selHist.length;$('brs').disabled=!selRedo.length;
- $('btu').disabled=!TI.can_undo;$('btr').disabled=!TI.can_redo;for(const b of['bum','bus2','bur'])$(b).disabled=!nsel||!TI.available;$('uh').textContent=!TI.available?'Развёртки нет: после замены головы остаётся только сетка.':(nsel?'Меняется развёртка выделенного места и мягкой кромки вокруг; остальное не двигается.':'Сначала выделите место на модели (кистью или рамкой).');
- for(const v of['tex','uv']){$('v-'+v).disabled=!TI.available;$('v-'+v).title=TI.available?'':'Текстуры и UV нет после замены головы'}}
+ $('btu').disabled=!TI.can_undo;$('btr').disabled=!TI.can_redo;for(const b of['bum','bus2','bur'])$(b).disabled=!nsel||!TI.available;$('uh').textContent=!TI.available?'У этой головы нет развёртки (в импортированном файле нет UV): доступна только сетка.':(nsel?'Меняется развёртка выделенного места и мягкой кромки вокруг; остальное не двигается.':'Сначала выделите место на модели (кистью или рамкой).');
+ for(const v of['tex','uv']){$('v-'+v).disabled=!TI.available;$('v-'+v).title=TI.available?'':'У этой головы нет UV и текстуры (в файле их не было)'}}
 async function load(){const m=await (await fetch('/api/edit/mesh')).json();
  geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);geo.computeVertexNormals();
  col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));paint([]);
@@ -261,7 +261,7 @@ async function toggleBefore(){if(view!='mesh'){toast('«До» показыва�
 async function hist(a){const r=await post(a);await reloadMesh(true);refresh();toast(r&&r.error?r.error:(a=='undo'?'Отменено':'Возвращено'),r&&r.error?'err':'')}
 async function reloadMesh(fit,url){showB=false;$('bb').classList.remove('on');$('bb').textContent='Показать «до»';const m=await (await fetch(url||'/api/edit/mesh')).json();NH=m.nhead;NF=m.nfhead;if(!url)HF=m.f.slice(0,NF*3);
  S.remove(mesh);geo.dispose();geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));mesh.geometry=geo;S.add(mesh);
- geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true);if(!url){await tinfo();if(view!='mesh'&&!TI.available)await setView('mesh');else await refreshView()}}
+ geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true);if(!url){await tinfo();if(TX.width>=512&&TI.available)await loadTexImg();if(view!='mesh'&&!TI.available){await setView('mesh');toast('У этой головы нет развёртки (UV): доступна только форма')}else await refreshView()}}
 let JOB=null;
 async function rep(){const r=await post('replace_job',{donor:$('dn').value,part:$('dpart').value,scale:$('sc').value});if(r.error){toast(r.error,'err');return}
  JOB=r.job;$('prog').hidden=false;$('pc').hidden=false;$('rrep').hidden=true;$('brp').disabled=true;setSt('Заменяю голову…');
@@ -289,7 +289,7 @@ async function loadParts(){const r=await (await fetch('/api/edit/parts?src='+enc
  const big=r.parts.reduce((a,b)=>b.vertices>a.vertices?b:a,r.parts[0]);$('dpart').innerHTML=r.parts.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+' ('+p.vertices+' вершин)</option>').join('');$('dpart').value=big.name;$('dpart').disabled=r.parts.length<2}
 async function upload(f){if(!f)return;if(f.size>64<<20){toast('Файл больше 64 МБ','err');return}const r=await (await fetch('/api/edit/upload?name='+encodeURIComponent(f.name),{method:'POST',body:f})).json();$('ifile').value='';
  if(r.error){toast(r.error,'err');return}const st=await (await fetch('/api/edit/state')).json();fillSrc(st.sources,r.id);$('dlg').close();$('s-imp').open=true;toast('Файл загружен. Выберите часть с головой и нажмите «Импортировать голову»','ok')}
-function xlinks(){const b=$('xb').checked?'&body=1':'';for(const f of['glb','obj','png'])$('x-'+f).href='/api/edit/export?fmt='+f+(f=='glb'?b:'');$('xh').textContent=TI.available?'Голова с текущими правками формы, текстуры и UV.':'Только форма головы: после замены головы текстуры и UV нет.'}
+function xlinks(){const b=$('xb').checked?'&body=1':'';for(const f of['glb','obj','png'])$('x-'+f).href='/api/edit/export?fmt='+f+(f=='glb'?b:'');$('xh').textContent=TI.available?'Голова с текущими правками формы, текстуры и UV.':'Только форма головы: у неё нет UV и текстуры.'}
 $('dlg').addEventListener('toggle',xlinks);xlinks();
 /* текстура и UV */
 async function tinfo(){const r=await (await fetch('/api/edit/tex_info')).json();if(!r.error)TI=r;sync()}
