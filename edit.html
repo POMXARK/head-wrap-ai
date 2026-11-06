@@ -83,8 +83,8 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 </style></head><body>
 <header class="top">
  <h1>Правка области</h1>
- <button class="btn" id="bu" title="Отменить последнюю правку модели" onclick="hist('undo')">↶ Отменить</button>
- <button class="btn" id="br" title="Вернуть правку модели" onclick="hist('redo')">↷ Вернуть</button>
+ <button class="btn" id="bu" title="Отменить последний шаг: в виде «Сетка» — правку модели, в «Текстура»/«UV» — мазок (Z)" onclick="undoAny(false)">↶ Отменить</button>
+ <button class="btn" id="br" title="Вернуть отменённый шаг (Shift+Z)" onclick="undoAny(true)">↷ Вернуть</button>
  <span class="sep"></span>
  <button class="btn" onclick="$('dlg').showModal()" title="Загрузить голову из файла или игры, сохранить результат">Файл</button>
  <button class="btn" id="bb" onclick="toggleBefore()" title="Сравнить с состоянием до последней правки">Показать «до»</button>
@@ -120,7 +120,7 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
    <div class="fld"><div class="lb"><span>Сохранить область под именем</span></div><div class="grid2" style="grid-template-columns:1fr auto"><input id="nm" type="text" placeholder="например, левый глаз"><button class="btn" onclick="saveSel()">Сохранить</button></div></div>
    <div id="saved"></div>
   </div></details>
-  <details class="sec" open><summary>2. Правка</summary><div class="bd">
+  <details class="sec" id="s-edit" open><summary>2. Правка</summary><div class="bd">
    <div class="opg" id="opg" role="group" aria-label="Что сделать"></div>
    <div id="pf" class="bd" style="padding:0"></div>
    <div class="fld"><div class="lb"><span>Мягкость края</span><b id="vf">0.2</b></div><input id="ft" type="range" min="0" max="1" step="0.05" value="0.2" oninput="vf.textContent=this.value" aria-label="Растушёвка края"></div>
@@ -148,7 +148,7 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
    <div class="fld"><div class="lb"><span>Угол</span><b id="van">15°</b></div><input id="an" type="range" min="-90" max="90" step="5" value="15" oninput="van.textContent=this.value+'°'" aria-label="Угол поворота"></div>
    <button class="btn wide" id="bur" onclick="uvX('rotate')">Повернуть развёртку</button>
   </div></details>
-  <details class="sec" id="s-imp"><summary>5. Импорт головы</summary><div class="bd">
+  <details class="sec" id="s-imp" hidden><summary>5. Импорт головы</summary><div class="bd">
    <div class="help">Голова из выбранного источника встаёт на розетку «шея» манекена. Источник — шаблон, файл проекта, загруженный файл или модель игры.</div>
    <div class="fld"><div class="lb"><span>Донор</span></div><select id="dn" aria-label="Донор" onchange="loadParts()"></select></div>
    <div class="fld"><div class="lb"><span>Часть файла (голова)</span></div><select id="dpart" aria-label="Часть файла"></select></div>
@@ -158,7 +158,7 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
    <div id="rrep" class="box" hidden></div>
    <div id="sg0"></div>
   </div></details>
-  <details class="sec" open><summary>Журнал правок</summary><div class="bd"><ol id="log"><li class="mut">Пока пусто</li></ol></div></details>
+  <details class="sec" id="s-log"><summary>Журнал правок</summary><div class="bd"><ol id="log"><li class="mut">Пока пусто</li></ol></div></details>
  </aside>
 </div>
 <footer class="status"><span id="st">Готово</span><span class="sp" style="flex:1"></span><span>Вне выделения модель не меняется (проверяется тестами)</span></footer>
@@ -191,7 +191,7 @@ function frame(headOnly){const p=geo.attributes.position.array,n=headOnly?NH:p.l
  const c=new THREE.Vector3((mn[0]+mx[0])/2,(mn[1]+mx[1])/2,(mn[2]+mx[2])/2),r=Math.hypot(mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2])/2;
  ctl.target.copy(c);C.position.set(c.x,c.y,c.z+r*2.6);C.near=r/50;C.far=r*60;C.updateProjectionMatrix();window.RAD=r;ctl.update()}
 /* инструменты и режимы */
-function hints(){const nav='<span><kbd>ПКМ</kbd> вращать</span><span><kbd>колесо</kbd> масштаб</span>';
+function hints(){const nav='<span><kbd>ПКМ</kbd> вращать</span><span><kbd>колесо</kbd> масштаб</span><span><kbd>СКМ</kbd> сдвиг</span><span><kbd>[</kbd><kbd>]</kbd> размер</span>';
  const t={brush:'<span><kbd>ЛКМ</kbd> красить область</span>'+nav,box:'<span><kbd>ЛКМ</kbd> обвести рамкой</span>'+nav,grab:'<span><kbd>ЛКМ</kbd> потянуть выделенное</span>'+nav,paint:view=='uv'?'<span><kbd>ЛКМ</kbd> рисовать по развёртке</span><span><kbd>ПКМ</kbd> двигать</span><span><kbd>колесо</kbd> масштаб</span>':'<span><kbd>ЛКМ</kbd> рисовать по модели</span>'+nav,orbit:view=='uv'?'<span><kbd>ЛКМ</kbd> двигать развёртку</span><span><kbd>колесо</kbd> масштаб</span>':'<span><kbd>ЛКМ</kbd> вращать</span><span><kbd>ПКМ</kbd> сдвинуть</span><span><kbd>колесо</kbd> масштаб</span>'}[tool];
  $('hints').innerHTML=t+'<span><kbd>Z</kbd> шаг назад</span><span><kbd>Esc</kbd> снять выделение</span>';$('f-size').hidden=tool!='brush'}
 function setTool(t){if(t=='paint'&&view=='mesh'){setView('tex');return}if(view=='uv'&&!['paint','orbit'].includes(t)){toast('В виде «UV» доступны «Рисовать» и «Вид». Выделять — в виде «Сетка» или «Текстура»');return}
@@ -227,9 +227,11 @@ async function undoSel(redo){const from=redo?selRedo:selHist,to=redo?selHist:sel
 async function undoAny(redo){if(view!='mesh'&&(redo?TI.can_redo:TI.can_undo)){texHist(redo?'redo':'undo');return}if(await undoSel(redo))return;hist(redo?'redo':'undo')}
 const act=a=>{snap();return post('select',{action:a,steps:2}).then(r=>{res(r);if(a=='clear'&&!r.error)toast('Выделение снято (Z — вернуть)')})};
 const byRegion=()=>{const v=$('rg').value;if(v){snap();post('select',{action:'region',name:v,mode}).then(res)}};
-const mb=()=>{ctl.mouseButtons.LEFT=sel?-1:THREE.MOUSE.ROTATE;ctl.mouseButtons.RIGHT=sel?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN};
+const mb=()=>{ctl.mouseButtons.MIDDLE=THREE.MOUSE.PAN;ctl.mouseButtons.LEFT=sel?-1:THREE.MOUSE.ROTATE;ctl.mouseButtons.RIGHT=sel?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN};
 addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.altKey)return;const k=e.code;/* физические клавиши: работают и в русской раскладке */
- if(k=='KeyB')setTool('brush');else if(k=='KeyX')setTool('box');else if(k=='KeyR')setTool('orbit');else if(k=='KeyG')setTool('grab');else if(k=='KeyP')setTool('paint');else if(k=='KeyZ'){e.preventDefault();undoAny(e.shiftKey)}else if(k=='KeyY'){e.preventDefault();undoAny(true)}else if(k=='Escape')act('clear')});
+ if(k=='KeyB')setTool('brush');else if(k=='KeyX')setTool('box');else if(k=='KeyR')setTool('orbit');else if(k=='KeyG')setTool('grab');else if(k=='KeyP')setTool('paint');else if(k=='KeyZ'){e.preventDefault();undoAny(e.shiftKey)}else if(k=='KeyY'){e.preventDefault();undoAny(true)}else if(k=='BracketLeft'||k=='BracketRight'){const id=view=='mesh'?'rs':'tr',el=$(id);el.value=Math.min(+el.max,Math.max(+el.min,+el.value+(k=='BracketRight'?1:-1)*(+el.step||1)*2));el.dispatchEvent(new Event('input'))}else if(k=='Escape')act('clear')});
+document.addEventListener('dblclick',e=>{const t=e.target;if(t.type=='range'){t.value=t.defaultValue;t.dispatchEvent(new Event('input'))}});
+function ctxPanels(){const m=view=='mesh';$('s-tex').hidden=m;$('s-uv').hidden=view!='uv';const e=$('s-edit');if(e)e.hidden=!m}
 let down=false;const ray=new THREE.Raycaster(),mv=new THREE.Vector2();
 function hit(e){const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,C);const h=ray.intersectObject(mesh)[0];
  if(!h||h.faceIndex>=NF)return;pending={action:'brush',point:[h.point.x,h.point.y,h.point.z],radius:+$('rs').value*(window.RAD||1)*0.2,mode,sym:$('sym').checked};flush()}
@@ -312,7 +314,7 @@ async function setView(v){if(v!='mesh'&&!TI.available){toast('Текстуры �
  mesh.visible=v=='mesh';if(tmesh)tmesh.visible=v=='tex';cv.style.display=v=='uv'?'none':'block';$('uvc').style.display=v=='uv'?'block':'none';
  if(v!='mesh')$('s-tex').open=true;if(v=='uv')$('s-uv').open=true;
  if(v=='uv'&&!['paint','orbit'].includes(tool))tool='paint';if(v=='mesh'&&tool=='paint')tool='brush';
- if(v=='uv'){uvv.fit=true;uvSize()}setTool(tool);$('empty').hidden=v!='mesh'||nsel>0;drawUV()}
+ if(v=='uv'){uvv.fit=true;uvSize()}setTool(tool);ctxPanels();$('empty').hidden=v!='mesh'||nsel>0;drawUV()}
 function hexRGB(h){return[1,3,5].map(i=>parseInt(h.substr(i,2),16))}
 function addPt(u,v){if(u<0||u>1||v<0||v>1)return;const r=+$('tr').value/(TX.width||1024),l=stroke[stroke.length-1];if(l&&Math.hypot(l[0]-u,l[1]-v)<r*.25)return;stroke.push([u,v]);previewDab(u,v)}
 function previewDab(u,v){if(tmode!='paint')return;const g=TX.getContext('2d'),r=+$('tr').value,x=u*TX.width,y=(1-v)*TX.height,a=+$('ts').value,c=hexRGB($('tc').value),gd=g.createRadialGradient(x,y,0,x,y,r);
@@ -353,4 +355,5 @@ $('uvc').addEventListener('wheel',e=>{e.preventDefault();const r=$('uvc').getBou
 new ResizeObserver(()=>{uvv.fit=true;drawUV()}).observe($('uvc'));
 (function loop(){requestAnimationFrame(loop);ctl.update();R.render(S,C)})();
 load();
+ctxPanels();
 </script></body></html>
