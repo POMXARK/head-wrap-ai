@@ -131,7 +131,7 @@ def state():
     return {'regions': REG['names'], 'draft': int(DRAFT.count()), 'draft_vertices': DRAFT.vertices(), 'vertices': len(m.V),
             'selections': [{'id': i, 'name': meta['name'], 'count': s.count(), 'feather': meta['feather']}
                            for i, (s, meta) in A.sel.items()],
-            'ops': A.log, 'donors': DONORS, 'can_undo': bool(A._undo), 'can_redo': bool(A._redo)}
+            'ops': [dict(o, stale_scores=bool(o.get('scores')) and i < len(A.log) - 1) for i, o in enumerate(A.log)], 'donors': DONORS, 'can_undo': bool(A._undo), 'can_redo': bool(A._redo)}
 
 
 def mesh():

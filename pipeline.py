@@ -96,12 +96,28 @@ def save_variant(name):
     return name, None
 
 
+def stale_reason(score_file, inputs=('hero1_eye.glb', 'options.json'), work=None):
+    """why a score file is out of date (ours, B3.3): None if fresh, else a text; inputs are names in work/ whose mtime is newer"""
+    work = work or WORK
+    f = os.path.join(work, score_file)
+    if not os.path.exists(f):
+        return 'нет оценки'
+    t = os.path.getmtime(f)
+    names = {'hero1_eye.glb': 'модель пересобрана после оценки', 'options.json': 'настройки изменены после оценки'}
+    for n in inputs:
+        q = os.path.join(work, n)
+        if os.path.exists(q) and os.path.getmtime(q) > t + 1e-6:
+            return names.get(n, n + ' новее оценки')
+    return None
+
+
 def state():
     out = {'running': STATE['running'], 'rc': STATE['rc'], 'lines': STATE['lines'][-200:]}
     try:
         out['eyes'] = json.load(open(os.path.join(WORK, 'eye_score.json')))
     except (OSError, ValueError):
         out['eyes'] = None
+    out['eyes_stale'] = stale_reason('eye_score.json') if out['eyes'] else None
     out['glb'] = 'work/hero1_eye.glb' if os.path.exists(os.path.join(WORK, 'hero1_eye.glb')) else None
     out['variants'] = variants()
     out['has_png'] = os.path.exists(os.path.join(WORK, 'eye_score.png'))
@@ -174,7 +190,7 @@ $('mv').src=u(v);$('mvn').textContent=v||'текущая сборка';$('b2').h
 async function poll(){const s=await (await fetch('/api/run')).json();
 $('st').textContent=s.running?('идёт: '+s.running+' …'):(s.rc==null?'':(s.rc==0?'готово':'код '+s.rc));$('st').className=s.rc==0?'ok':'';
 $('lg').textContent=s.lines.join('\\n');$('lg').scrollTop=1e9;
-if(s.eyes){$('sc').innerHTML=table(s.eyes)}
+if(s.eyes){$('sc').innerHTML=(s.eyes_stale?'<div class=bad id=stale style="padding:4px">⚠ Оценка устарела: '+s.eyes_stale+'. Нажмите «Оценка глаз».</div>':'')+table(s.eyes)}
 if(s.has_png){$('im').hidden=false;$('im').src='/api/img?p=work/eye_score.png&t='+(s.eyes?Math.round(s.eyes.score*1000):0)}
 if(!s.running&&s.rc===0&&window.mT!=s.lines.length){window.mT=s.lines.length;$('mi').hidden=false;$('mi').src='/api/img?p=work/mesh_score.png&t='+Date.now()}
 if(s.variants)vars(s.variants);

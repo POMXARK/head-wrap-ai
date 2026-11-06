@@ -108,7 +108,7 @@ async function rep(){const r=await post('replace_job',{donor:$('dn').value,scale
   return}}
 const cancelJob=()=>JOB&&post('cancel',{id:JOB});
 async function refresh(){const st=await (await fetch('/api/edit/state')).json();info(st)}
-function info(st){if(!$('dn').options.length)Object.entries(st.donors).forEach(([k,v])=>{const o=document.createElement('option');o.value=k;o.textContent=v;$('dn').append(o)});$('log').textContent=st.ops.length?st.ops.map((o,i)=>(i+1)+'. '+o.op+(o.selection?' в области '+o.selection:'')+' '+JSON.stringify(o.params)).join('\n'):'Журнал правок пуст.';
+function info(st){if(!$('dn').options.length)Object.entries(st.donors).forEach(([k,v])=>{const o=document.createElement('option');o.value=k;o.textContent=v;$('dn').append(o)});$('log').textContent=st.ops.length?st.ops.map((o,i)=>(i+1)+'. '+o.op+(o.selection?' в области '+o.selection:'')+' '+JSON.stringify(o.params)+(o.stale_scores?'  ⚠ оценка устарела (после неё были правки)':'')).join('\n'):'Журнал правок пуст.';
  $('saved').innerHTML=st.selections.map(s=>'<div class="row"><b>'+s.name+'</b> <span class="m">'+s.count+' вершин</span><button onclick="loadSel(\''+s.id+'\')">Выбрать</button><button onclick="delSel(\''+s.id+'\')">Удалить</button></div>').join('')}
 async function loadSel(id){res(await post('select',{action:'load',id}))}
 async function delSel(id){await post('delete',{id});refresh()}
