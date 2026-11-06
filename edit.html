@@ -1,75 +1,180 @@
 <!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Правка области</title>
 <style>
-:root{--bg:#f3f4f6;--fg:#1f2430;--card:#fff;--line:#d8dce3;--acc:#2563eb;--ok:#15803d}
-@media (prefers-color-scheme:dark){:root{--bg:#14171c;--fg:#e6e8ec;--card:#1d2128;--line:#343a45;--acc:#6ea0ff;--ok:#4ade80}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif}
-header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
-header a{color:var(--acc)}h1{font-size:16px;margin:0}
-.ws{display:grid;grid-template-columns:minmax(300px,1.5fr) minmax(260px,1fr);gap:12px;padding:12px 16px}
-@media(max-width:800px){.ws{grid-template-columns:1fr}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}
-#cv{width:100%;height:520px;display:block;border-radius:6px;background:#2a2f3a;touch-action:none}
-button,select,input{font:inherit;padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
-button{cursor:pointer}button.on{background:var(--acc);color:#fff;border-color:var(--acc)}button.go{background:var(--ok);color:#fff;border-color:var(--ok)}
-.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}small,.m{color:#8a92a3}
-label{display:block;margin:6px 0 2px}input[type=range]{width:100%}
-#log{max-height:140px;overflow:auto;font:12px monospace;white-space:pre-wrap}
+/* Дизайн-система: токены, шаг 8 px, контраст текста ≥ 4.5:1, цели нажатия ≥ 36 px, один главный акцент */
+:root{--bg:#f4f5f7;--panel:#fff;--panel2:#f0f2f5;--fg:#1b2030;--mut:#566074;--line:#d5d9e1;--acc:#1d4ed8;--acc-fg:#fff;--acc-soft:#e3ebff;--ok:#166534;--warn:#92400e;--err:#b91c1c;--view:#222733;--r:8px;--s1:4px;--s2:8px;--s3:16px;--s4:24px;--shadow:0 4px 16px rgba(0,0,0,.18)}
+@media (prefers-color-scheme:dark){:root{--bg:#12151b;--panel:#1b2029;--panel2:#242a35;--fg:#e8eaef;--mut:#a3acbd;--line:#363e4c;--acc:#7aa7ff;--acc-fg:#0b1226;--acc-soft:#22324f;--ok:#6ee7a0;--warn:#fbbf6a;--err:#ff8a8a;--view:#1a1e27}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;grid-template-rows:48px 1fr 28px;overflow:hidden}
+button,select,input{font:inherit;color:var(--fg)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.mut{color:var(--mut)}
+/* верхняя полоса */
+.top{display:flex;align-items:center;gap:var(--s2);padding:0 var(--s3);background:var(--panel);border-bottom:1px solid var(--line)}
+.top h1{font-size:15px;font-weight:650;margin:0 var(--s3) 0 0}
+.top .sp{flex:1}
+.top a{color:var(--mut);text-decoration:none;padding:6px 8px;border-radius:6px}.top a:hover{background:var(--panel2);color:var(--fg)}
+.sep{width:1px;height:24px;background:var(--line);margin:0 var(--s1)}
+/* кнопки */
+.btn{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn:hover:not(:disabled){background:var(--panel2)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--acc);color:var(--acc-fg);border-color:var(--acc);font-weight:600}
+.btn.primary:hover:not(:disabled){filter:brightness(1.08);background:var(--acc)}
+.btn.on{background:var(--acc-soft);border-color:var(--acc);color:var(--fg)}
+.btn.wide{width:100%}
+kbd{font:11px ui-monospace,monospace;padding:1px 5px;border:1px solid var(--line);border-radius:4px;background:var(--panel2);color:var(--mut)}
+/* рабочая область */
+.main{display:grid;grid-template-columns:72px minmax(0,1fr) 352px;min-height:0}
+.tools{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:var(--s2);padding:var(--s2)}
+.tool{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;border:1px solid transparent;border-radius:var(--r);background:none;cursor:pointer;font-size:11px;color:var(--mut)}
+.tool svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tool:hover{background:var(--panel2);color:var(--fg)}
+.tool[aria-pressed=true]{background:var(--acc-soft);border-color:var(--acc);color:var(--fg)}
+.view{position:relative;background:var(--view);min-width:0;min-height:0}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.chip{position:absolute;top:var(--s2);left:var(--s2);background:rgba(20,24,32,.82);color:#f1f3f7;padding:6px 12px;border-radius:999px;font-size:13px;backdrop-filter:blur(4px)}
+.chip b{font-weight:650}
+.empty{position:absolute;left:var(--s2);top:52px;background:rgba(20,24,32,.78);color:#f1f3f7;padding:12px 16px;border-radius:var(--r);pointer-events:none;text-align:center;max-width:300px;font-size:13px}
+.hints{position:absolute;left:var(--s2);bottom:var(--s2);right:var(--s2);display:flex;gap:var(--s3);flex-wrap:wrap;color:#e6e9f0;font-size:12px;pointer-events:none}.hints>span{background:rgba(20,24,32,.72);padding:3px 8px;border-radius:6px}
+.hints kbd{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#e6e9f0}
+#rb{position:absolute;border:2px dashed #4ade80;background:rgba(74,222,128,.15);display:none;pointer-events:none}
+/* правая панель */
+.side{background:var(--bg);border-left:1px solid var(--line);overflow:auto;padding:var(--s2);display:flex;flex-direction:column;gap:var(--s2)}
+.sec{background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
+.sec>summary,.sec>.hd{list-style:none;cursor:pointer;padding:12px var(--s3);font-weight:650;display:flex;align-items:center;justify-content:space-between;gap:var(--s2)}
+.sec>summary::-webkit-details-marker{display:none}
+.sec>summary::after{content:"▸";color:var(--mut);transition:transform .15s}
+.sec[open]>summary::after{transform:rotate(90deg)}
+.sec .bd{padding:0 var(--s3) var(--s3);display:flex;flex-direction:column;gap:12px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.seg button{min-height:36px;border:0;background:var(--panel);cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed=true]{background:var(--acc-soft);font-weight:600}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld .lb{display:flex;justify-content:space-between;color:var(--mut);font-size:13px}
+.fld .lb b{color:var(--fg);font-weight:600}
+input[type=range]{width:100%;height:24px;accent-color:var(--acc)}
+select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);width:100%}
+.help{font-size:12px;color:var(--mut)}
+.saved{display:flex;align-items:center;gap:var(--s2);padding:4px 0;border-top:1px solid var(--line)}
+.saved span.n{flex:1}
+.box{border:1px solid var(--line);background:var(--panel2);border-radius:var(--r);padding:var(--s2) 12px;font-size:13px}
+.prog{height:8px;background:var(--line);border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;background:var(--acc);width:0;transition:width .15s}
+#log{margin:0;padding:0;list-style:none;max-height:160px;overflow:auto;font-size:13px}
+#log li{padding:6px 0;border-top:1px solid var(--line);display:flex;gap:var(--s2)}#log li:first-child{border-top:0}
+#log .w{color:var(--warn)}
+/* строка состояния и уведомления */
+.status{display:flex;align-items:center;gap:var(--s3);padding:0 var(--s3);background:var(--panel);border-top:1px solid var(--line);font-size:12px;color:var(--mut)}
+#toasts{position:fixed;right:var(--s3);bottom:44px;display:flex;flex-direction:column;gap:var(--s2);z-index:9}
+.toast{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:var(--r);padding:10px 14px;box-shadow:var(--shadow);max-width:360px}
+.toast.err{border-left-color:var(--err)}.toast.ok{border-left-color:var(--ok)}
+@media(max-width:900px){body{overflow:auto;display:block}.main{display:flex;flex-direction:column}.tools{flex-direction:row;overflow:auto;border-right:0;border-bottom:1px solid var(--line)}.tool{flex:0 0 72px}.view{height:55vh}.side{border-left:0}.status{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style></head><body>
-<header><h1>Правка области</h1><span class="m">колесо — масштаб, правая кнопка — вращение; выберите место на модели → инструмент работает только внутри него; вне — не меняется</span><a href="/pipeline">панель</a> <a href="/proto">прототипы</a></header>
-<div class="ws">
-<div class="card"><div style="position:relative"><canvas id="cv"></canvas><div id="rb" style="position:absolute;border:2px dashed #4ade80;background:rgba(74,222,128,.15);display:none;pointer-events:none"></div></div>
-<div class="row"><button id="bs" class="on">Выделять: вкл (B)</button><button id="bt" onclick="tool=tool=='brush'?'box':'brush';this.textContent='инструмент: '+(tool=='brush'?'кисть':'рамка')">инструмент: кисть</button><button id="bm">режим: добавить</button>
-<span class="m">размер</span><input id="rs" type="range" min="0.1" max="2" step="0.05" value="0.5" style="width:120px">
-<button onclick="act('grow')">Расширить</button><button onclick="act('shrink')">Сузить</button><button onclick="act('invert')">Инвертировать</button><button onclick="act('clear')">Снять</button><button onclick="frame(true)">К голове</button><button onclick="frame(false)">Весь вид</button>
-<select id="rg" onchange="byRegion()"><option value="">по части…</option></select></div>
-<div id="info" class="m">Выделено: 0 вершин</div>
-<div class="row"><input id="nm" placeholder="имя области"><button onclick="saveSel()">Сохранить область</button></div>
-<div id="saved"></div></div>
-<div class="card"><b>Инструмент</b>
-<div class="row"><select id="op"><option value="smooth">Сгладить</option><option value="displace">Сместить</option></select></div>
-<label>Итераций сглаживания: <b id="vi">5</b></label><input id="it" type="range" min="1" max="30" value="5" oninput="vi.textContent=this.value">
-<label>Смещение по Z (для «Сместить»): <b id="vz">0.1</b></label><input id="dz" type="range" min="-0.5" max="0.5" step="0.01" value="0.1" oninput="vz.textContent=this.value">
-<label>Растушёвка края: <b id="vf">0.2</b></label><input id="ft" type="range" min="0" max="1" step="0.05" value="0.2" oninput="vf.textContent=this.value">
-<div class="row"><button class="go" onclick="apply()">Применить в области</button><button onclick="suggest()">Посоветовать</button><button id="bb" onclick="toggleBefore()">Показать «до»</button><button onclick="hist('undo')">Отменить</button><button onclick="hist('redo')">Вернуть</button></div>
-<hr><b>Заменить голову</b> <span class="m">на манекене; голова встаёт на розетку «шея»</span>
-<div class="row"><select id="dn"></select><select id="sc"><option value="match_ring">масштаб по кольцу</option><option value="keep">не менять масштаб</option></select><button class="go" onclick="rep()">Заменить</button></div>
-<div id="sg"></div><div id="prog" style="display:none"><div style="background:var(--line);border-radius:4px;height:10px"><div id="pb" style="background:var(--acc);height:10px;border-radius:4px;width:0"></div></div>
-<div class="row"><span id="pm" class="m"></span><button id="pc" onclick="cancelJob()">Отмена</button></div></div>
-<div id="rrep" class="m"></div>
-<div id="log" class="m">Журнал правок пуст.</div>
-<small>Вне выделения модель не меняется — это проверяется в тестах (tests/test_asset_ops.py).</small></div></div>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<header class="top">
+ <h1>Правка области</h1>
+ <button class="btn" id="bu" title="Отменить (Z)" onclick="hist('undo')">↶ Отменить <kbd>Z</kbd></button>
+ <button class="btn" id="br" title="Вернуть (Shift+Z)" onclick="hist('redo')">↷ Вернуть</button>
+ <span class="sep"></span>
+ <button class="btn" id="bb" onclick="toggleBefore()" title="Сравнить с состоянием до последней правки">Показать «до»</button>
+ <span class="sp"></span>
+ <button class="btn" onclick="frame(true)">К голове</button>
+ <button class="btn" onclick="frame(false)">Весь вид</button>
+ <span class="sep"></span>
+ <a href="/pipeline">Панель</a><a href="/proto">Прототипы</a>
+</header>
+<div class="main">
+ <nav class="tools" aria-label="Инструменты">
+  <button class="tool" id="t-brush" aria-pressed="true" title="Кисть: проведите по модели (B)" onclick="setTool('brush')"><svg viewBox="0 0 24 24"><path d="M4 20c3 0 4-1 4-3a3 3 0 0 1 3-3l8-8a2 2 0 0 0-3-3l-8 8a3 3 0 0 0-3 3c0 3-1 4-1 6z"/></svg>Кисть<kbd>B</kbd></button>
+  <button class="tool" id="t-box" aria-pressed="false" title="Рамка: обведите место (X)" onclick="setTool('box')"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" stroke-dasharray="3 3"/></svg>Рамка<kbd>X</kbd></button>
+  <button class="tool" id="t-orbit" aria-pressed="false" title="Вращать вид без выделения (R)" onclick="setTool('orbit')"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg>Вид<kbd>R</kbd></button>
+ </nav>
+ <section class="view" aria-label="3D-вид">
+  <canvas id="cv"></canvas><div id="rb"></div>
+  <div class="chip" id="info">Выделено: <b>0</b></div>
+  <div class="empty" id="empty"><b>Выберите место на модели</b><br><span style="opacity:.85">Проведите кистью по лицу или выберите часть справа. Вне выделения модель не меняется.</span></div>
+  <div class="hints" id="hints"></div>
+ </section>
+ <aside class="side" aria-label="Параметры">
+  <details class="sec" open><summary>1. Область</summary><div class="bd">
+   <div class="seg" role="group" aria-label="Режим выделения"><button id="m-add" aria-pressed="true" onclick="setMode('add')">Добавить</button><button id="m-sub" aria-pressed="false" onclick="setMode('sub')">Вычесть</button></div>
+   <div class="fld" id="f-size"><div class="lb"><span>Размер кисти</span><b id="vr">0.5</b></div><input id="rs" type="range" min="0.1" max="2" step="0.05" value="0.5" oninput="vr.textContent=this.value" aria-label="Размер кисти"></div>
+   <div class="grid2"><button class="btn" onclick="act('grow')" title="Расширить на 2 шага по сетке">Расширить</button><button class="btn" onclick="act('shrink')">Сузить</button><button class="btn" onclick="act('invert')">Инвертировать</button><button class="btn" onclick="act('clear')" title="Esc">Снять</button></div>
+   <select id="rg" onchange="byRegion()" aria-label="Выбрать часть"><option value="">Выбрать часть модели…</option></select>
+   <div class="fld"><div class="lb"><span>Сохранить область под именем</span></div><div class="grid2" style="grid-template-columns:1fr auto"><input id="nm" type="text" placeholder="например, левый глаз"><button class="btn" onclick="saveSel()">Сохранить</button></div></div>
+   <div id="saved"></div>
+  </div></details>
+  <details class="sec" open><summary>2. Правка</summary><div class="bd">
+   <div class="seg" role="group" aria-label="Что сделать"><button id="o-smooth" aria-pressed="true" onclick="setOp('smooth')">Сгладить</button><button id="o-displace" aria-pressed="false" onclick="setOp('displace')">Сместить</button></div>
+   <div class="fld" id="f-it"><div class="lb"><span>Сколько раз сгладить</span><b id="vi">5</b></div><input id="it" type="range" min="1" max="30" value="5" oninput="vi.textContent=this.value;window.LAM=0;window.AG=false" aria-label="Итераций сглаживания"></div>
+   <div class="fld" id="f-dz" hidden><div class="lb"><span>Сдвиг вперёд/назад</span><b id="vz">0.1</b></div><input id="dz" type="range" min="-0.5" max="0.5" step="0.01" value="0.1" oninput="vz.textContent=this.value" aria-label="Смещение по Z"></div>
+   <div class="fld"><div class="lb"><span>Мягкость края</span><b id="vf">0.2</b></div><input id="ft" type="range" min="0" max="1" step="0.05" value="0.2" oninput="vf.textContent=this.value" aria-label="Растушёвка края"></div>
+   <button class="btn primary wide" id="ba" onclick="apply()">Применить в области</button>
+   <div class="help" id="why">Сначала выделите место на модели.</div>
+   <button class="btn wide" id="bsg" onclick="suggest()">Посоветовать параметры</button>
+   <div id="sg"></div>
+  </div></details>
+  <details class="sec"><summary>3. Заменить голову</summary><div class="bd">
+   <div class="help">Голова донора встаёт на розетку «шея» манекена.</div>
+   <div class="fld"><div class="lb"><span>Донор</span></div><select id="dn" aria-label="Донор"></select></div>
+   <div class="fld"><div class="lb"><span>Масштаб</span></div><select id="sc" aria-label="Масштаб"><option value="match_ring">по кольцу шеи</option><option value="keep">не менять</option></select></div>
+   <button class="btn primary wide" id="brp" onclick="rep()">Заменить голову</button>
+   <div id="prog" hidden><div class="prog"><i id="pb"></i></div><div class="grid2" style="grid-template-columns:1fr auto;align-items:center;margin-top:8px"><span id="pm" class="help"></span><button class="btn" id="pc" onclick="cancelJob()">Отмена</button></div></div>
+   <div id="rrep" class="box" hidden></div>
+   <div id="sg0"></div>
+  </div></details>
+  <details class="sec" open><summary>Журнал правок</summary><div class="bd"><ol id="log"><li class="mut">Пока пусто</li></ol></div></details>
+ </aside>
+</div>
+<footer class="status"><span id="st">Готово</span><span class="sp" style="flex:1"></span><span>Вне выделения модель не меняется (проверяется тестами)</span></footer>
+<div id="toasts" aria-live="polite"></div>
+<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-const $=id=>document.getElementById(id);let tool='brush',NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null;
+window.addEventListener('error',e=>{console.log(e.filename,e.lineno,e.colno,e.error&&e.error.stack);fetch('/api/edit/state?err='+encodeURIComponent(e.message+' @'+e.filename+':'+e.lineno+':'+e.colno+' '+(e.error&&e.error.stack)));const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка скрипта: '+e.message;t.append(d)}});
+window.addEventListener('unhandledrejection',e=>{const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка: '+(e.reason&&e.reason.message||e.reason);t.append(d)}});
+const $=id=>document.getElementById(id);let tool='brush',NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null,nsel=0,nops=0;
 const post=(p,d)=>fetch('/api/edit/'+p,{method:'POST',body:JSON.stringify(d||{})}).then(r=>r.json());
-const cv=$('cv'),R=new THREE.WebGLRenderer({canvas:cv,antialias:true}),S=new THREE.Scene(),C=new THREE.PerspectiveCamera(35,1,0.1,200);
-S.background=new THREE.Color(0x2a2f3a);S.add(new THREE.HemisphereLight(0xffffff,0x444455,1.1));const L=new THREE.DirectionalLight(0xffffff,0.8);L.position.set(2,4,6);S.add(L);
+function toast(t,k){const e=document.createElement('div');e.className='toast '+(k||'');e.textContent=t;$('toasts').append(e);setTimeout(()=>e.remove(),k=='err'?7000:3500)}
+const setSt=t=>$('st').textContent=t;
+const cv=$('cv'),S=new THREE.Scene(),C=new THREE.PerspectiveCamera(35,1,0.1,200);
+S.background=new THREE.Color(0x222733);S.add(new THREE.HemisphereLight(0xffffff,0x444455,1.1));const L=new THREE.DirectionalLight(0xffffff,0.8);L.position.set(2,4,6);S.add(L);
+let R;try{R=new THREE.WebGLRenderer({canvas:cv,antialias:true})}catch(e){R={setSize(){},render(){}};$('empty').innerHTML='<b>3D-вид недоступен</b><br>Браузер не создал WebGL-контекст. Включите аппаратное ускорение или откройте страницу в другом браузере.';$('empty').style.background='rgba(120,30,30,.9)';window.NOGL=1}
 const ctl=new THREE.OrbitControls(C,cv);ctl.enableDamping=false;
 function size(){const w=cv.clientWidth,h=cv.clientHeight;R.setSize(w,h,false);C.aspect=w/h;C.updateProjectionMatrix()}
-addEventListener('resize',size);
+addEventListener('resize',size);new ResizeObserver(size).observe(cv);
 function frame(headOnly){const p=geo.attributes.position.array,n=headOnly?NH:p.length/3;const mn=[1e9,1e9,1e9],mx=[-1e9,-1e9,-1e9];
  for(let i=0;i<n;i++)for(let k=0;k<3;k++){mn[k]=Math.min(mn[k],p[i*3+k]);mx[k]=Math.max(mx[k],p[i*3+k])}
  const c=new THREE.Vector3((mn[0]+mx[0])/2,(mn[1]+mx[1])/2,(mn[2]+mx[2])/2),r=Math.hypot(mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2])/2;
  ctl.target.copy(c);C.position.set(c.x,c.y,c.z+r*2.6);C.near=r/50;C.far=r*60;C.updateProjectionMatrix();window.RAD=r;ctl.update()}
+/* инструменты и режимы */
+function hints(){const t={brush:'<span><kbd>ЛКМ</kbd> красить</span><span><kbd>ПКМ</kbd> вращать</span><span><kbd>колесо</kbd> масштаб</span>',box:'<span><kbd>ЛКМ</kbd> обвести рамкой</span><span><kbd>ПКМ</kbd> вращать</span><span><kbd>колесо</kbd> масштаб</span>',orbit:'<span><kbd>ЛКМ</kbd> вращать</span><span><kbd>ПКМ</kbd> сдвинуть</span><span><kbd>колесо</kbd> масштаб</span>'}[tool];
+ $('hints').innerHTML=t+'<span><kbd>Esc</kbd> снять выделение</span>';$('f-size').hidden=tool!='brush'}
+function setTool(t){tool=t;sel=t!='orbit';for(const k of['brush','box','orbit'])$('t-'+k).setAttribute('aria-pressed',k==t);mb();hints();cv.style.cursor=sel?'crosshair':'grab'}
+function setMode(m){mode=m;$('m-add').setAttribute('aria-pressed',m=='add');$('m-sub').setAttribute('aria-pressed',m=='sub')}
+function setOp(o){$('o-smooth').setAttribute('aria-pressed',o=='smooth');$('o-displace').setAttribute('aria-pressed',o=='displace');$('f-it').hidden=o!='smooth';$('f-dz').hidden=o!='displace';window.OP=o}
+window.OP='smooth';
+function sync(){$('info').innerHTML='Выделено: <b>'+nsel+'</b> вершин';$('empty').hidden=nsel>0&&!window.NOGL;$('ba').disabled=!nsel;
+ $('why').textContent=nsel?'Изменится только выделенное место и мягкая кромка вокруг.':'Сначала выделите место на модели.';$('bsg').disabled=!nsel;$('bu').disabled=!nops}
 async function load(){const m=await (await fetch('/api/edit/mesh')).json();
  geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);geo.computeVertexNormals();
  col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));paint([]);
  mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.8,side:THREE.DoubleSide}));S.add(mesh);
- geo.computeBoundingSphere();NH=m.nhead;NF=m.nfhead;frame(true);size();
+ geo.computeBoundingSphere();NH=m.nhead;NF=m.nfhead;size();frame(true);
  const st=await (await fetch('/api/edit/state')).json();st.regions.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;$('rg').append(o)});
- paint(st.draft_vertices);info(st);}
+ paint(st.draft_vertices);info(st);setTool('brush');setSt('Готово')}
 function paint(ids){for(let i=0;i<col.length;i+=3){const b=i/3>=NH&&NH>0;col[i]=b?.55:.85;col[i+1]=b?.6:.7;col[i+2]=b?.7:.6}
- for(const v of ids){col[v*3]=.15;col[v*3+1]=.55;col[v*3+2]=1}geo.attributes.color.needsUpdate=true;$('info').textContent='Выделено: '+ids.length+' вершин'+(ids.length?'':' · вне области модель не меняется');}
-function res(r){if(r.error){alert(r.error);return}if(r.vertices)paint(r.vertices)}
+ for(const v of ids){col[v*3]=.15;col[v*3+1]=.55;col[v*3+2]=1}geo.attributes.color.needsUpdate=true;nsel=ids.length;sync()}
+function res(r){if(r.error){toast(r.error,'err');return}if(r.vertices)paint(r.vertices)}
 const act=a=>post('select',{action:a,steps:2}).then(res);
 const byRegion=()=>{const v=$('rg').value;if(v)post('select',{action:'region',name:v,mode}).then(res)};
 const mb=()=>{ctl.mouseButtons.LEFT=sel?-1:THREE.MOUSE.ROTATE;ctl.mouseButtons.RIGHT=sel?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN};
-$('bs').onclick=()=>{sel=!sel;$('bs').classList.toggle('on',sel);$('bs').textContent='Выделять: '+(sel?'вкл':'выкл')+' (B)';mb()};
-$('bm').onclick=()=>{mode=mode=='add'?'sub':'add';$('bm').textContent='режим: '+(mode=='add'?'добавить':'вычесть')};
-addEventListener('keydown',e=>{if(e.target.tagName!='INPUT'&&e.key=='b')$('bs').onclick();if(e.target.tagName!='INPUT'&&e.key=='z')hist('undo')});
-mb();let down=false;const ray=new THREE.Raycaster(),mv=new THREE.Vector2();
+addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.ctrlKey||e.metaKey)return;const k=e.key.toLowerCase();
+ if(k=='b')setTool('brush');else if(k=='x')setTool('box');else if(k=='r')setTool('orbit');else if(k=='z')hist(e.shiftKey?'redo':'undo');else if(e.key=='Escape')act('clear')});
+let down=false;const ray=new THREE.Raycaster(),mv=new THREE.Vector2();
 function hit(e){const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,C);const h=ray.intersectObject(mesh)[0];
  if(!h||h.faceIndex>=NF)return;pending={action:'brush',point:[h.point.x,h.point.y,h.point.z],radius:+$('rs').value*(window.RAD||1)*0.2,mode};flush()}
 async function flush(){if(busy||!pending)return;busy=true;const d=pending;pending=null;res(await post('select',d));busy=false;flush()}
@@ -83,36 +188,43 @@ function boxSel(x0,y0,x1,y1){const P=geo.attributes.position.array,N=geo.attribu
  mesh.updateMatrixWorld();for(let i=0;i<NH;i++){v.set(P[i*3],P[i*3+1],P[i*3+2]);const nx=N[i*3]*(cam.x-v.x)+N[i*3+1]*(cam.y-v.y)+N[i*3+2]*(cam.z-v.z);if(nx<=0)continue;
   v.project(C);const sx=(v.x+1)/2*w,sy=(1-v.y)/2*h;if(sx>=lx&&sx<=hx&&sy>=ly&&sy<=hy)ids.push(i)}
  post('select',{action:'ids',ids,mode}).then(res)}
-async function saveSel(){const r=await post('save',{name:$('nm').value,feather:+$('ft').value*(window.RAD||1)*0.2});refresh()}
-async function apply(){const op=$('op').value,params=op=='smooth'?{iterations:+$('it').value,...(window.LAM?{lam:window.LAM}:{})}:{vector:[0,0,+$('dz').value]};
- const r=await post('apply',{op,selection:'draft',params,by:window.AG?'agent':'user',feather:+$('ft').value*(window.RAD||1)*0.2});window.AG=false;window.LAM=0;if(r.error){alert(r.error);return}await reloadMesh();refresh()}
-async function suggest(){const r=await post('suggest',{selection:'draft',feather:+$('ft').value*(window.RAD||1)*0.2});if(r.error){alert(r.error);return}
- $('sg').innerHTML='<b>Совет помощника</b> <span class="m">(только предлагает)</span>'+r.proposals.map((p,i)=>'<div class="row">'+(i+1)+'. сгладить, итераций '+p.params.iterations+', сила '+p.params.lam+' — <span class="m">'+p.why+'</span><button onclick="takeSug('+p.params.iterations+','+p.params.lam+')">Взять</button></div>').join('')}
-function takeSug(it,lam){$('op').value='smooth';$('it').value=it;$('vi').textContent=it;window.LAM=lam;window.AG=true}
+const feather=()=>+$('ft').value*(window.RAD||1)*0.2;
+async function saveSel(){if(!nsel){toast('Сначала выделите место','err');return}const r=await post('save',{name:$('nm').value,feather:feather()});if(r.error){toast(r.error,'err');return}$('nm').value='';toast('Область сохранена','ok');refresh()}
+async function apply(){const op=window.OP,params=op=='smooth'?{iterations:+$('it').value,...(window.LAM?{lam:window.LAM}:{})}:{vector:[0,0,+$('dz').value]};
+ setSt('Применяю…');$('ba').disabled=true;
+ const r=await post('apply',{op,selection:'draft',params,by:window.AG?'agent':'user',feather:feather()});window.AG=false;window.LAM=0;
+ if(r.error){toast(r.error,'err');setSt('Ошибка');sync();return}await reloadMesh();refresh();toast('Правка применена. «Отменить» (Z) вернёт как было','ok');setSt('Готово')}
+async function suggest(){const r=await post('suggest',{selection:'draft',feather:feather()});if(r.error){toast(r.error,'err');return}
+ $('sg').innerHTML='<div class="box"><b>Совет помощника</b> <span class="mut">— только предлагает, применяете вы</span>'+r.proposals.map((p,i)=>'<div class="saved"><span class="n">'+(i+1)+'. сгладить ×'+p.params.iterations+', сила '+p.params.lam+'<br><span class="help">'+p.why+'</span></span><button class="btn" onclick="takeSug('+p.params.iterations+','+p.params.lam+')">Взять</button></div>').join('')+'</div>'}
+function takeSug(it,lam){setOp('smooth');$('it').value=it;$('vi').textContent=it;window.LAM=lam;window.AG=true;toast('Параметры подставлены — нажмите «Применить»')}
 let showB=false;
 async function toggleBefore(){if(showB){await reloadMesh(false);return}
- const r=await (await fetch('/api/edit/before')).json();if(r.none){alert('Пока нечего сравнивать: правок нет');return}
- await reloadMesh(false,'/api/edit/before');showB=true;$('bb').classList.add('on');$('bb').textContent='«до» (нажмите — вернуть «после»)';
- $('info').textContent='Показано состояние ДО последней правки ('+r.op+')'+(r.max_move!=null?', наибольший сдвиг вершины '+r.max_move.toFixed(3):', форма сетки изменилась')}
+ const r=await (await fetch('/api/edit/before')).json();if(r.none){toast('Пока нечего сравнивать: правок нет');return}
+ await reloadMesh(false,'/api/edit/before');showB=true;$('bb').classList.add('on');$('bb').textContent='Вернуть «после»';
+ $('info').innerHTML='<b>«ДО»</b> последней правки ('+r.op+')'+(r.max_move!=null?', сдвиг до '+r.max_move.toFixed(3):', форма сетки изменилась');$('empty').hidden=true}
 async function hist(a){await post(a);await reloadMesh(true);refresh()}
 async function reloadMesh(fit,url){showB=false;$('bb').classList.remove('on');$('bb').textContent='Показать «до»';const m=await (await fetch(url||'/api/edit/mesh')).json();NH=m.nhead;NF=m.nfhead;
- if(m.v.length!=geo.attributes.position.array.length||true){S.remove(mesh);geo.dispose();geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));mesh.geometry=geo;S.add(mesh)}
+ S.remove(mesh);geo.dispose();geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));mesh.geometry=geo;S.add(mesh);
  geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true)}
 let JOB=null;
-async function rep(){const r=await post('replace_job',{donor:$('dn').value,scale:$('sc').value});if(r.error){alert(r.error);return}
- JOB=r.job;$('prog').style.display='block';$('pc').style.display='';$('rrep').textContent='';
+async function rep(){const r=await post('replace_job',{donor:$('dn').value,scale:$('sc').value});if(r.error){toast(r.error,'err');return}
+ JOB=r.job;$('prog').hidden=false;$('pc').hidden=false;$('rrep').hidden=true;$('brp').disabled=true;setSt('Заменяю голову…');
  for(;;){const j=await (await fetch('/api/edit/job?id='+JOB)).json();
-  $('pb').style.width=Math.round((j.progress||0)*100)+'%';$('pm').textContent=j.msg+' · '+Math.round((j.progress||0)*100)+'%'+(j.eta_s!=null?' · осталось ~'+j.eta_s+' с':'');
+  $('pb').style.width=Math.round((j.progress||0)*100)+'%';$('pm').textContent=j.msg+' · '+Math.round((j.progress||0)*100)+'%'+(j.eta_s!=null?' · ~'+j.eta_s+' с':'');
   if(j.status=='running'){await new Promise(r=>setTimeout(r,150));continue}
-  JOB=null;$('prog').style.display=j.status=='done'?'none':'block';$('pc').style.display='none';
-  if(j.status=='done'){const q=j.result.report;
-   $('rrep').textContent='Масштаб ×'+q.scale.toFixed(2)+', несовпадение кольца '+(q.ring_gap*100).toFixed(0)+'% радиуса'+(q.seam_stretch?', шов сшит полосой (длиннейшее ребро ×'+q.seam_stretch+' радиуса)':'');await reloadMesh(true);refresh()}
-  else if(j.status=='error')alert(j.error);
+  JOB=null;$('brp').disabled=false;$('pc').hidden=true;if(j.status=='done')$('prog').hidden=true;
+  if(j.status=='done'){const q=j.result.report;$('rrep').hidden=false;
+   $('rrep').textContent='Масштаб ×'+q.scale.toFixed(2)+', несовпадение кольца '+(q.ring_gap*100).toFixed(0)+'% радиуса'+(q.seam_stretch?', шов сшит полосой (длиннейшее ребро ×'+q.seam_stretch+' радиуса)':'');await reloadMesh(true);refresh();toast('Голова заменена','ok');setSt('Готово')}
+  else if(j.status=='error'){toast(j.error,'err');setSt('Ошибка')}
+  else{toast('Замена отменена');setSt('Отменено')}
   return}}
 const cancelJob=()=>JOB&&post('cancel',{id:JOB});
 async function refresh(){const st=await (await fetch('/api/edit/state')).json();info(st)}
-function info(st){if(!$('dn').options.length)Object.entries(st.donors).forEach(([k,v])=>{const o=document.createElement('option');o.value=k;o.textContent=v;$('dn').append(o)});$('log').textContent=st.ops.length?st.ops.map((o,i)=>(i+1)+'. '+o.op+(o.selection?' в области '+o.selection:'')+' '+JSON.stringify(o.params)+(o.stale_scores?'  ⚠ оценка устарела (после неё были правки)':'')).join('\n'):'Журнал правок пуст.';
- $('saved').innerHTML=st.selections.map(s=>'<div class="row"><b>'+s.name+'</b> <span class="m">'+s.count+' вершин</span><button onclick="loadSel(\''+s.id+'\')">Выбрать</button><button onclick="delSel(\''+s.id+'\')">Удалить</button></div>').join('')}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function info(st){if(!$('dn').options.length)Object.entries(st.donors).forEach(([k,v])=>{const o=document.createElement('option');o.value=k;o.textContent=v;$('dn').append(o)});
+ nops=st.ops.length;sync();
+ $('log').innerHTML=st.ops.length?st.ops.map((o,i)=>'<li><span class="mut">'+(i+1)+'.</span><span>'+esc(o.op)+(o.selection?' · '+esc(o.selection):'')+' <span class="mut">'+esc(JSON.stringify(o.params))+'</span>'+(o.stale_scores?'<br><span class="w">⚠ оценка устарела: после неё были правки</span>':'')+'</span></li>').join(''):'<li class="mut">Пока пусто</li>';
+ $('saved').innerHTML=st.selections.map(s=>'<div class="saved"><span class="n"><b>'+esc(s.name)+'</b> <span class="mut">'+s.count+' вершин</span></span><button class="btn" onclick="loadSel(\''+s.id+'\')">Выбрать</button><button class="btn" aria-label="Удалить область" onclick="delSel(\''+s.id+'\')">✕</button></div>').join('')}
 async function loadSel(id){res(await post('select',{action:'load',id}))}
 async function delSel(id){await post('delete',{id});refresh()}
 (function loop(){requestAnimationFrame(loop);ctl.update();R.render(S,C)})();
