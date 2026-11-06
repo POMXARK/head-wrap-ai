@@ -30,6 +30,32 @@ def test_empty_draft():
         pass
 
 
+def test_replace_head_and_undo():
+    import json, jsonschema
+    from referencing import Registry, Resource
+    E._init()
+    n0 = len(E.A.parts['head'].V)
+    n_log = len(E.A.log)
+    v_before = E.A.parts['head'].V.copy()
+    E.select({'action': 'region', 'name': 'neck'})
+    r = E.replace_head({'donor': 'hero1'})['report']
+    assert E.DRAFT.count() == 0   # ids of the old head mean nothing on the new one
+    assert r['ring_gap'] < 0.35 and r['scale'] > 1       # hero1 head is ~1 high, the template ~8 -> scaled up
+    body, head = E.A.parts['body'], E.A.parts['head']
+    assert head.V[:, 1].min() > body.V[:, 1].max() - 1.0   # head sits on top of the body ring
+    assert E.A.log[-1]['op'] == 'replace_part'
+    H = os.path.join(os.path.dirname(__file__), '..', 'spec')
+    load = lambda n: json.load(open(os.path.join(H, n)))
+    reg = Registry().with_resources([(n, Resource.from_contents(load(n))) for n in ('asset.schema.json', 'op.schema.json')])
+    assert not list(jsonschema.Draft202012Validator(load('op.schema.json'), registry=reg).iter_errors(
+        {k: v for k, v in E.A.log[-1].items() if k != 'ts'}))
+    E.select({'action': 'region', 'name': 'neck'})
+    assert E.history('undo')['ok'] and len(E.A.parts['head'].V) == n0 and len(E.A.log) == n_log
+    assert E.DRAFT.count() == 0   # regression found in the visible test: stale ids lit up random vertices
+    assert E.history('redo')['ok'] and not np.array_equal(E.A.parts['head'].V, v_before)
+    E.history('undo')
+
+
 if __name__ == '__main__':
     for k, f in list(globals().items()):
         if k.startswith('test_'):

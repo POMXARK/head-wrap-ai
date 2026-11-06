@@ -4,6 +4,7 @@ import json
 import os
 import threading
 import numpy as np
+import replace_part as RP
 from asset import Asset
 from selection import Selection, load_obj
 
@@ -21,6 +22,62 @@ def _init():
         A = Asset('head_template')
         A.add_part('head', m.V, m.F)
         DRAFT = Selection(A.parts['head'])
+        A.add_part('body', *_mannequin(m))
+
+
+def _mannequin(head):
+    """a simple body (ours, a stand-in until a real torso asset exists): a tube under the neck ring of the template head,
+    its top ring IS the neck ring, widening to shoulders"""
+    ring = RP.ring_of(head.V, head.F)
+    P = head.V[ring]
+    c = P.mean(0)
+    n = len(ring)
+    rings = []
+    prof = [(0.0, 1.0), (0.6, 1.5), (1.6, 3.2), (3.0, 3.8), (6.0, 3.4), (9.0, 3.2)]
+    for dy, k in prof:
+        Q = c + (P - c) * k
+        Q[:, 1] = P[:, 1] - dy
+        rings.append(Q)
+    V = np.vstack(rings)
+    F = []
+    for r in range(len(prof) - 1):
+        for i in range(n):
+            a, b = r * n + i, r * n + (i + 1) % n
+            F += [[a, a + n, b], [b, a + n, b + n]]
+    return V, np.array(F)
+
+
+DONORS = {'template': 'шаблон головы (этот же)', 'hero1': 'голова hero1 (work/hero1_head2.glb)'}
+
+
+def _donor(name):
+    if name == 'template':
+        m = load_obj(os.path.join(HERE, 'template/head_sub.obj'))
+        return m.V, m.F
+    if name == 'hero1':
+        import trimesh
+        g = trimesh.load(os.path.join(HERE, 'work/hero1_head2.glb'), force='scene').geometry['geometry_0']
+        V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
+        return V, inv.ravel()[g.faces]
+    raise ValueError('unknown donor ' + name)
+
+
+def replace_head(d):
+    """d: {donor: template|hero1, scale: match_ring|keep}: put the donor head on the neck socket of the body"""
+    global DRAFT
+    _init()
+    body = A.parts['body']
+    bl = RP.boundary_loops(body.F)
+    t_ring = max(bl, key=lambda l: body.V[l][:, 1].mean())
+    dV, dF = _donor(d['donor'])
+    d_ring = max(RP.boundary_loops(dF), key=len)
+    V, F, rep = RP.replace(body.V, body.F, t_ring, dV, dF, d_ring, d.get('scale', 'match_ring'), outward=[0, 1, 0])
+    off = rep['donor_offset']
+    A.replace_mesh('head', V[off:], F[len(body.F):] - off,
+                   {'donor': {'asset': d['donor'], 'part': 'head'}, 'socket': 'neck', 'scale': d.get('scale', 'match_ring'),
+                    'seam': 'overlap'}, scores={'after': {'ring_gap': round(rep['ring_gap'], 4), 'scale': round(rep['scale'], 4)}})
+    DRAFT = Selection(A.parts['head'])
+    return {'report': rep, 'donors': DONORS}
 
 
 def state():
@@ -29,13 +86,16 @@ def state():
     return {'regions': REG['names'], 'draft': int(DRAFT.count()), 'draft_vertices': DRAFT.vertices(), 'vertices': len(m.V),
             'selections': [{'id': i, 'name': meta['name'], 'count': s.count(), 'feather': meta['feather']}
                            for i, (s, meta) in A.sel.items()],
-            'ops': A.log, 'can_undo': bool(A._undo), 'can_redo': bool(A._redo)}
+            'ops': A.log, 'donors': DONORS, 'can_undo': bool(A._undo), 'can_redo': bool(A._redo)}
 
 
 def mesh():
+    """head first (its vertex ids are the selection ids), then the body; nhead tells where the head ends"""
     _init()
-    m = A.parts['head']
-    return {'v': np.round(m.V, 5).ravel().tolist(), 'f': m.F.ravel().tolist()}
+    h, b = A.parts['head'], A.parts['body']
+    V = np.vstack([h.V, b.V])
+    F = np.vstack([h.F, b.F + len(h.V)])
+    return {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(h.V), 'nfhead': len(h.F)}
 
 
 def select(d):
@@ -94,5 +154,11 @@ def apply(d):
 
 
 def history(action):
+    """undo/redo; a replace_part changes the vertex order, so the draft selection (vertex ids) is dropped then"""
+    global DRAFT
     _init()
-    return {'ok': A.undo() if action == 'undo' else A.redo()}
+    nxt = (A.log[-1] if A.log else None) if action == 'undo' else (A._redo[-1][2] if A._redo else None)
+    r = A.undo() if action == 'undo' else A.redo()
+    if (nxt and nxt['op'] == 'replace_part') or len(DRAFT.mask) != len(A.parts['head'].V):
+        DRAFT = Selection(A.parts['head'])
+    return {'ok': r}

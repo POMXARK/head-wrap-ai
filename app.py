@@ -293,7 +293,7 @@ class H(BaseHTTPRequestHandler):
             k = self.path[len('/api/edit/'):]
             try:
                 with edit_api.LOCK:
-                    r = {'select': edit_api.select, 'save': edit_api.save_selection, 'apply': edit_api.apply,
+                    r = {'select': edit_api.select, 'save': edit_api.save_selection, 'apply': edit_api.apply, 'replace': edit_api.replace_head,
                          'delete': lambda x: edit_api.delete_selection(x['id']) or {'ok': True},
                          'undo': lambda x: edit_api.history('undo'), 'redo': lambda x: edit_api.history('redo')}[k](d)
                 self.send(r)

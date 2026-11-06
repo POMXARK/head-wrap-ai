@@ -35,11 +35,17 @@ class Asset:
             if meta['part'] != part:
                 raise ValueError('selection %s belongs to %s, not %s' % (selection, meta['part'], part))
             w = s.weights(meta['feather'])
-        before = m.V.copy()
+        before = (m.V.copy(), m.F.copy())
         after = ops.apply(name, m.V, m.F, w, params)
-        self._undo.append((part, before, len(self.log)))
-        self._redo.clear()
+        self._push(part, before)
         m.V = after
+        return self._record(name, part, params, by, selection, scores)
+
+    def _push(self, part, before):
+        self._undo.append((part, before))
+        self._redo.clear()
+
+    def _record(self, name, part, params, by, selection=None, scores=None):
         rec = {'op': name, 'target': part, 'params': params or {}, 'by': by}
         if selection:
             rec['selection'] = selection
@@ -49,22 +55,35 @@ class Asset:
         self.log.append(rec)
         return rec
 
+    def replace_mesh(self, part, V, F, params, by='user', scores=None):
+        """topology-changing op (replace_part): the old (V, F) goes to the undo stack; selections of the part are dropped"""
+        m = self.parts[part]
+        self._push(part, (m.V.copy(), m.F.copy()))
+        self.parts[part] = Mesh(V, F)
+        for k in [k for k, (s, meta) in self.sel.items() if meta['part'] == part]:
+            self.sel.pop(k)
+        return self._record('replace_part', part, params, by, None, scores)
+
+    def _swap(self, part, snap):
+        m = self.parts[part]
+        cur = (m.V.copy(), m.F.copy())
+        self.parts[part] = Mesh(*snap) if len(snap[0]) != len(m.V) or not np.array_equal(snap[1], m.F) else m
+        if self.parts[part] is m:
+            m.V = snap[0]
+        return cur
+
     def undo(self):
         if not self._undo:
             return False
-        part, before, n = self._undo.pop()
-        m = self.parts[part]
-        self._redo.append((part, m.V.copy(), self.log.pop()))
-        m.V = before
+        part, snap = self._undo.pop()
+        self._redo.append((part, self._swap(part, snap), self.log.pop()))
         return True
 
     def redo(self):
         if not self._redo:
             return False
-        part, after, rec = self._redo.pop()
-        m = self.parts[part]
-        self._undo.append((part, m.V.copy(), len(self.log)))
-        m.V = after
+        part, snap, rec = self._redo.pop()
+        self._undo.append((part, self._swap(part, snap)))
         self.log.append(rec)
         return True
 
