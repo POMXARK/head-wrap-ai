@@ -41,19 +41,28 @@ input[type=range]{width:100%}.lab{display:flex;justify-content:space-between;fon
 <div id=cards style="margin-top:8px"></div></div></div>
 <div class=tl id=tl><span>импорт</span><span class=u>замена головы</span><span>цвет шеи</span></div></section>
 
-<section id=p2><div class=how><h3>П2. Область и инструмент</h3><ol>
-<li>Кистью или кликом отметьте область на модели (маска). Можно «добавить» и «вычесть».</li>
-<li>Выберите инструмент из списка, подходящего к части: для кожи — заливка и размытие, для сетки — заполнение ям.</li>
-<li>Двигайте параметры: превью в низком качестве обновляется сразу, оценка «до → после» видна рядом.</li>
-<li>Ограничения: «не трогать» (части и маски) и «макс. смещение вершин». Применение — отдельной кнопкой.</li></ol></div>
-<div class=row2><div class=pn><div style="position:relative"><model-viewer id=m2 camera-controls shading-intensity=1 exposure=1.1 data-src="/api/file?f=work/hero1_eye.glb"></model-viewer></div>
-<div class=mu><label><input type=checkbox id=br onchange="brush(this.checked)"> кисть маски (рисуйте по модели; выключите, чтобы вращать)</label> <button class=btn onclick="clr()">стереть маску</button></div></div>
-<div class=pn><h4>Инструмент: Заполнить яму</h4>
+<section id=p2><div class=how><h3>П2. Выделение области для точечных правок — как это работает</h3><ol>
+<li>Включите выделение и закрасьте кистью или обведите рамкой нужное место на модели. «Добавить» или «вычесть» переключает режим; «Расширить» / «Сузить» двигают край; «Инвертировать» выбирает всё остальное.</li>
+<li>Область можно взять целой частью (список «По части») или сохранить под именем — «левый глаз», «шея» — и вызывать потом одним кликом, в том числе для ассистента («правь только в области “левый глаз”»).</li>
+<li>Инструмент и ассистент работают только внутри области; у края — растушёвка, вне области модель не меняется. Что вне области, видно затемнённым.</li>
+<li>Перед применением видно оценку «до → после» и можно переключить «до/после»; применение — отдельной кнопкой, отменяется.</li></ol></div>
+<div class=ws style="grid-template-columns:minmax(300px,1.4fr) minmax(260px,1fr)"><div class=pn><div style="position:relative"><model-viewer id=m2 camera-controls shading-intensity=1 exposure=1.1 data-src="/api/file?f=work/hero1_eye.glb"></model-viewer></div>
+<div class=mu style="margin:6px 0"><b>Выделение:</b>
+<button class="btn ok" id=bs onclick="selOn(!SEL.on)">Выделять: выкл.</button>
+<button class=btn id=bm onclick="selMode()">режим: добавить</button>
+<button class=btn id=bt onclick="selTool()">инструмент: кисть</button>
+размер <input type=range id=bz min=6 max=50 value=18 style="width:90px"></div>
+<div class=mu><button class=btn onclick="selGrow(1)">Расширить</button><button class=btn onclick="selGrow(-1)">Сузить</button><button class=btn onclick="selInv()">Инвертировать</button><button class=btn onclick="clr()">Снять</button>
+По части: <select onchange="selPart(this.value)"><option value="">—</option><option value="eyeL">левый глаз</option><option value="eyeR">правый глаз</option><option value="neck">шея</option><option value="cheek">щека</option></select></div>
+<div id=selinfo class=mu style="margin:6px 0">Выделено: 0% вида · вне области модель не меняется</div>
+<div class=mu><input id=sn placeholder="имя области" style="width:140px"><button class=btn onclick="selSave()">Сохранить область</button></div><div id=sl class=tl style="flex-wrap:wrap"></div></div>
+<div class=pn><h4>Инструмент: Заполнить яму — в области: <span id=sc3>«область не выбрана»</span></h4>
 <div class=lab><span>Колец вокруг ямы</span><b id=v1>6</b></div><input type=range min=2 max=12 value=6 oninput="v1.textContent=this.value;sc()">
 <div class=lab><span>Предел сдвига UV</span><b id=v2>0.15</b></div><input type=range min=3 max=50 value=15 oninput="v2.textContent=(this.value/100).toFixed(2);sc()">
-<div class=lab><span>Макс. смещение вершин, мм</span><b id=v3>2</b></div><input type=range min=0 max=10 value=2 oninput="v3.textContent=this.value;sc()">
+<div class=lab><span>Растушёвка края области, мм</span><b id=v3>2</b></div><input type=range min=0 max=10 value=2 oninput="v3.textContent=this.value;sc()">
 <p>Оценка глаз: <b>65</b> → <b id=sc2 class=up>75</b> · Оценка сетки: <b>75</b> → <b>75</b></p>
-<label><input type=checkbox checked> не трогать нос и рот</label><br><button class="btn ok">Применить</button><button class=btn>Сбросить</button></div></div></section>
+<label><input type=checkbox checked> вне области не менять (затемнить)</label><br><label><input type=checkbox> показать «до» вместо «после»</label><br>
+<button class="btn ok">Применить в области</button><button class=btn>Сбросить</button></div></div></section>
 
 <section id=p3><div class=how><h3>П3. Сравнение A / B</h3><ol>
 <li>Две версии рядом, камеры связаны: вращаете одну — вращается вторая.</li>
@@ -98,7 +107,7 @@ input[type=range]{width:100%}.lab{display:flex;justify-content:space-between;fon
 </main>
 <script type=module src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 <script>
-const $=id=>document.getElementById(id),T=[['p1','П1 Рабочая область'],['p2','П2 Область и инструмент'],['p3','П3 Сравнение A/B'],['p4','П4 Ручная правка'],['p5','П5 Замена части'],['p6','П6 Обучение']];
+const $=id=>document.getElementById(id),T=[['p1','П1 Рабочая область'],['p2','П2 Выделение области'],['p3','П3 Сравнение A/B'],['p4','П4 Ручная правка'],['p5','П5 Замена части'],['p6','П6 Обучение']];
 $('nav').innerHTML=T.map(t=>'<button data-t='+t[0]+'>'+t[1]+'</button>').join('');
 function show(id){document.querySelectorAll('#'+id+' model-viewer[data-src]').forEach(m=>{if(!m.getAttribute('src'))m.setAttribute('src',m.dataset.src)});for(const[i]of T){$(i).classList.toggle('on',i==id)}document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==id));try{location.hash=id}catch(e){}}
 $('nav').onclick=e=>{if(e.target.dataset.t)show(e.target.dataset.t)};show((location.hash||'#p1').slice(1));
@@ -119,8 +128,22 @@ function ds(){$('ds').innerHTML=edits.map((e,i)=>'<tr><td><input type=checkbox '
 function cnt(){$('mc').textContent='В датасет пойдёт правок: '+edits.filter(e=>e.l).length+' из '+edits.length}
 function rules(){$('rules').innerHTML='<tr><th>правило</th><th>раз</th><th></th></tr>'+RU.map((r,i)=>'<tr style="opacity:'+(r[2]?1:.4)+'"><td>'+r[0]+'</td><td>'+r[1]+'</td><td><button class=btn onclick="RU['+i+'][2]^=1;rules()">'+(r[2]?'выкл.':'вкл.')+'</button><button class="btn no" onclick="RU.splice('+i+',1);rules()">✕</button></td></tr>').join('')}
 function finishEdit(){const t=MT[mti][0];edits.push({t:t,r:'под правым глазом',a:75,b:75+(mti%2)*2,l:$('learn').checked?1:0});const same=edits.filter(e=>e.t==t&&e.l).length;if(same>=3&&!RU.some(r=>r[0].startsWith('Часто: '+t))){RU.push(['Часто: '+t+' в области глаз — предложить автоматически (подтвердите)',same,1])}ds();rules()}
-function brush(on){let c=$('cv');if(!c){c=document.createElement('canvas');c.id='cv';c.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none';$('m2').parentNode.appendChild(c)}c.style.pointerEvents=on?'auto':'none';c.style.cursor=on?'crosshair':'';if(!c.w){c.width=c.clientWidth;c.height=c.clientHeight;c.w=1;let d=0;const x=c.getContext('2d');c.onpointerdown=e=>{d=1;c.setPointerCapture(e.pointerId);dot(e)};c.onpointerup=()=>d=0;c.onpointermove=e=>{if(d)dot(e)};function dot(e){const r=c.getBoundingClientRect();x.fillStyle='rgba(220,38,38,.45)';x.beginPath();x.arc((e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height,16,0,7);x.fill()}}}
-function clr(){const c=$('cv');if(c)c.getContext('2d').clearRect(0,0,c.width,c.height)}
+const SEL={on:0,add:1,tool:'brush',saved:[]};
+function cvs(){let c=$('cv');if(!c){c=document.createElement('canvas');c.id='cv';c.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none';const p=$('m2').parentNode;p.appendChild(c);c.width=p.clientWidth;c.height=p.clientHeight;let d=0,x0,y0,snap;const g=c.getContext('2d');const xy=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]};
+const paint=(f)=>{g.globalCompositeOperation=SEL.add?'source-over':'destination-out';g.fillStyle='rgba(220,38,38,.5)';f();g.globalCompositeOperation='source-over';info()};
+c.onpointerdown=e=>{d=1;c.setPointerCapture(e.pointerId);[x0,y0]=xy(e);snap=g.getImageData(0,0,c.width,c.height);if(SEL.tool=='brush')paint(()=>{g.beginPath();g.arc(x0,y0,+$('bz').value,0,7);g.fill()})};
+c.onpointerup=()=>d=0;c.onpointermove=e=>{if(!d)return;const[x,y]=xy(e);if(SEL.tool=='brush')paint(()=>{g.beginPath();g.arc(x,y,+$('bz').value,0,7);g.fill()});else{g.putImageData(snap,0,0);paint(()=>g.fillRect(x0,y0,x-x0,y-y0))}}}return c}
+function info(){const c=$('cv');if(!c)return;const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let n=0;for(let i=3;i<d.length;i+=16)if(d[i]>20)n++;const p=n*100/(d.length/16);$('selinfo').textContent='Выделено: '+p.toFixed(1)+'% вида (~'+Math.round(p*35)+' вершин) · вне области модель не меняется';$('sc3').textContent=p>0.05?'«текущее выделение»':'«область не выбрана»'}
+function selOn(on){SEL.on=on;const c=cvs();c.style.pointerEvents=on?'auto':'none';c.style.cursor=on?'crosshair':'';$('bs').textContent='Выделять: '+(on?'вкл. (модель не вращается)':'выкл.')}
+function selMode(){SEL.add=!SEL.add;$('bm').textContent='режим: '+(SEL.add?'добавить':'вычесть')}
+function selTool(){SEL.tool=SEL.tool=='brush'?'rect':'brush';$('bt').textContent='инструмент: '+(SEL.tool=='brush'?'кисть':'рамка')}
+function selGrow(k){const c=cvs(),g=c.getContext('2d'),t=document.createElement('canvas');t.width=c.width;t.height=c.height;t.getContext('2d').drawImage(c,0,0);g.globalCompositeOperation=k>0?'source-over':'destination-out';const o=k>0?[[-4,0],[4,0],[0,-4],[0,4]]:[[-3,0],[3,0],[0,-3],[0,3]];if(k>0)o.forEach(p=>g.drawImage(t,p[0],p[1]));else{const m=document.createElement('canvas');m.width=c.width;m.height=c.height;const mg=m.getContext('2d');mg.fillStyle='#000';mg.fillRect(0,0,c.width,c.height);mg.globalCompositeOperation='destination-out';mg.drawImage(t,0,0);o.forEach(p=>g.drawImage(m,p[0],p[1]))}g.globalCompositeOperation='source-over';info()}
+function selInv(){const c=cvs(),g=c.getContext('2d'),t=document.createElement('canvas');t.width=c.width;t.height=c.height;const tg=t.getContext('2d');tg.fillStyle='rgba(220,38,38,.5)';tg.fillRect(0,0,c.width,c.height);tg.globalCompositeOperation='destination-out';tg.drawImage(c,0,0);g.clearRect(0,0,c.width,c.height);g.drawImage(t,0,0);info()}
+function clr(){const c=$('cv');if(c){c.getContext('2d').clearRect(0,0,c.width,c.height);info()}}
+function selPart(v){if(!v)return;const c=cvs(),g=c.getContext('2d'),W=c.width,H=c.height,P={eyeL:[.55,.38,.14,.08],eyeR:[.31,.38,.14,.08],neck:[.36,.78,.28,.18],cheek:[.28,.5,.16,.14]}[v];g.fillStyle='rgba(220,38,38,.5)';g.beginPath();g.ellipse((P[0]+P[2]/2)*W,(P[1]+P[3]/2)*H,P[2]*W/2,P[3]*H/2,0,0,7);g.fill();info()}
+function selSave(){const c=$('cv');if(!c)return;const n=$('sn').value||'область '+(SEL.saved.length+1);SEL.saved.push([n,c.toDataURL()]);$('sn').value='';selList()}
+function selList(){$('sl').innerHTML=SEL.saved.map((s,i)=>'<span class=u onclick="selLoad('+i+')" style="cursor:pointer">'+s[0]+' <b onclick="event.stopPropagation();SEL.saved.splice('+i+',1);selList()">✕</b></span>').join('')}
+function selLoad(i){const c=cvs(),g=c.getContext('2d'),im=new Image();im.onload=()=>{g.clearRect(0,0,c.width,c.height);g.drawImage(im,0,0);info();$('sc3').textContent='«'+SEL.saved[i][0]+'»'};im.src=SEL.saved[i][1]}
 mtools();ds();rules();document.querySelectorAll('model-viewer').forEach(m=>{m.addEventListener('load',()=>m.dataset.loaded=1);m.addEventListener('error',e=>m.dataset.err=JSON.stringify(e.detail||'')) });
 {const a=$('ma'),b=$('mb');let lock=0;const link=(x,y)=>x.addEventListener('camera-change',e=>{if(e.detail.source!=='user-interaction'||lock)return;lock=1;y.cameraOrbit=x.getCameraOrbit().toString();y.fieldOfView=x.getFieldOfView()+'deg';lock=0});link(a,b);link(b,a)}
 </script></body></html>

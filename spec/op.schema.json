@@ -3,26 +3,133 @@
  "$id": "op.schema.json",
  "title": "Edit operation (reversible, logged)",
  "type": "object",
- "required": ["op", "target", "by"],
+ "required": [
+  "op",
+  "target",
+  "by"
+ ],
  "properties": {
-  "op": {"enum": ["texture_inpaint", "texture_blur", "color_match", "fill_hole", "smooth", "decimate", "uv_refit",
-                  "deform_cage", "set_material", "replace_part", "manual_edit"]},
-  "target": {"type": "string", "description": "part id or part id + mask name"},
-  "params": {"type": "object"},
-  "by": {"enum": ["user", "agent", "policy"]},
-  "scores": {"type": "object", "properties": {"before": {"type": "object"}, "after": {"type": "object"}}},
-  "verdict": {"enum": ["accepted", "rejected", "undone", "tweaked"]}
- },
- "allOf": [{
-  "if": {"properties": {"op": {"const": "replace_part"}}},
-  "then": {"properties": {"params": {"type": "object", "required": ["donor", "socket"],
+  "op": {
+   "enum": [
+    "texture_inpaint",
+    "texture_blur",
+    "color_match",
+    "fill_hole",
+    "smooth",
+    "decimate",
+    "uv_refit",
+    "deform_cage",
+    "set_material",
+    "replace_part",
+    "manual_edit"
+   ]
+  },
+  "target": {
+   "type": "string",
+   "description": "part id or part id + mask name"
+  },
+  "params": {
+   "type": "object"
+  },
+  "by": {
+   "enum": [
+    "user",
+    "agent",
+    "policy"
+   ]
+  },
+  "scores": {
+   "type": "object",
    "properties": {
-    "donor": {"type": "object", "required": ["asset", "part"], "properties": {"asset": {"type": "string"}, "part": {"type": "string"}}},
-    "socket": {"type": "string", "description": "socket name on the target part to attach to"},
-    "donor_socket": {"type": "string"},
-    "scale": {"enum": ["match_ring", "keep", "uniform_by_height"]},
-    "seam": {"enum": ["bridge", "weld", "overlap"]},
-    "color_match": {"type": "boolean"},
-    "rig": {"enum": ["transfer_weights", "keep_donor", "none"]}}}}}
- }]
+    "before": {
+     "type": "object"
+    },
+    "after": {
+     "type": "object"
+    }
+   }
+  },
+  "verdict": {
+   "enum": [
+    "accepted",
+    "rejected",
+    "undone",
+    "tweaked"
+   ]
+  },
+  "selection": {
+   "type": "string",
+   "description": "id from asset.selections: the op changes only inside it (feather from the selection); absent = whole target"
+  }
+ },
+ "allOf": [
+  {
+   "if": {
+    "properties": {
+     "op": {
+      "const": "replace_part"
+     }
+    }
+   },
+   "then": {
+    "properties": {
+     "params": {
+      "type": "object",
+      "required": [
+       "donor",
+       "socket"
+      ],
+      "properties": {
+       "donor": {
+        "type": "object",
+        "required": [
+         "asset",
+         "part"
+        ],
+        "properties": {
+         "asset": {
+          "type": "string"
+         },
+         "part": {
+          "type": "string"
+         }
+        }
+       },
+       "socket": {
+        "type": "string",
+        "description": "socket name on the target part to attach to"
+       },
+       "donor_socket": {
+        "type": "string"
+       },
+       "scale": {
+        "enum": [
+         "match_ring",
+         "keep",
+         "uniform_by_height"
+        ]
+       },
+       "seam": {
+        "enum": [
+         "bridge",
+         "weld",
+         "overlap"
+        ]
+       },
+       "color_match": {
+        "type": "boolean"
+       },
+       "rig": {
+        "enum": [
+         "transfer_weights",
+         "keep_donor",
+         "none"
+        ]
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
 }
