@@ -1,0 +1,30 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "critic.schema.json",
+ "title": "Result of one critic (common metrics format, task C1)",
+ "type": "object",
+ "required": ["critic", "version", "score", "metrics"],
+ "properties": {
+  "critic": {"type": "string", "description": "eye | mesh | replace | ..."},
+  "version": {"const": 1},
+  "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+  "summary": {"type": "string"},
+  "source": {"type": "string", "description": "file or op the numbers came from"},
+  "metrics": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": ["name", "value", "better"],
+    "properties": {
+     "name": {"type": "string"},
+     "label": {"type": "string", "description": "plain-language name for the UI"},
+     "value": {"type": "number"},
+     "unit": {"type": "string"},
+     "better": {"enum": ["higher", "lower"]},
+     "zone": {"type": "string", "description": "part/region/view the value belongs to"},
+     "ok": {"type": ["boolean", "null"], "description": "null = no threshold known"}
+    }
+   }
+  }
+ }
+}

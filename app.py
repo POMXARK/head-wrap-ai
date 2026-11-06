@@ -208,6 +208,12 @@ class H(BaseHTTPRequestHandler):
             import edit_api
             with edit_api.LOCK:
                 self.send({'state': edit_api.state, 'mesh': edit_api.mesh, 'before': edit_api.before}[path.rsplit('/', 1)[1]]())
+        elif path == '/api/critic':      # common critic format (C1): ?kind=eye|mesh
+            import critics
+            try:
+                self.send(critics.load(urllib.parse.parse_qs(q).get('kind', [''])[0]))
+            except (KeyError, OSError, ValueError) as e:
+                self.send({'error': 'нет оценки: %s' % e})
         elif path == '/api/edit/job':
             import jobs
             try:
