@@ -204,6 +204,12 @@ class H(BaseHTTPRequestHandler):
                 self.send_error(403)
             else:
                 self.send(open(f, 'rb').read(), 'model/gltf-binary')
+        elif path in ('/api/edit/state', '/api/edit/mesh'):
+            import edit_api
+            with edit_api.LOCK:
+                self.send(edit_api.state() if path.endswith('state') else edit_api.mesh())
+        elif path == '/edit':
+            self.send(open(os.path.join(HERE, 'edit.html'), 'rb').read(), 'text/html')
         elif path == '/model':
             self.send(MODEL, 'text/html')
         elif path == '/api/model':
@@ -280,6 +286,19 @@ class H(BaseHTTPRequestHandler):
                 self.send_error(400)
                 return
             self.send({'ok': True, 'out': os.path.relpath(out, HERE)})
+            return
+        if self.path.startswith('/api/edit/'):
+            import edit_api
+            d = json.loads(self.rfile.read(int(self.headers.get('Content-Length') or 0)) or b'{}')
+            k = self.path[len('/api/edit/'):]
+            try:
+                with edit_api.LOCK:
+                    r = {'select': edit_api.select, 'save': edit_api.save_selection, 'apply': edit_api.apply,
+                         'delete': lambda x: edit_api.delete_selection(x['id']) or {'ok': True},
+                         'undo': lambda x: edit_api.history('undo'), 'redo': lambda x: edit_api.history('redo')}[k](d)
+                self.send(r)
+            except Exception as e:
+                self.send({'error': str(e)})
             return
         if self.path == '/api/focus':
             import review

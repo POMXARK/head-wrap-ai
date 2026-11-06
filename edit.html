@@ -1,0 +1,80 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Правка области</title>
+<style>
+:root{--bg:#f3f4f6;--fg:#1f2430;--card:#fff;--line:#d8dce3;--acc:#2563eb;--ok:#15803d}
+@media (prefers-color-scheme:dark){:root{--bg:#14171c;--fg:#e6e8ec;--card:#1d2128;--line:#343a45;--acc:#6ea0ff;--ok:#4ade80}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif}
+header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+header a{color:var(--acc)}h1{font-size:16px;margin:0}
+.ws{display:grid;grid-template-columns:minmax(300px,1.5fr) minmax(260px,1fr);gap:12px;padding:12px 16px}
+@media(max-width:800px){.ws{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}
+#cv{width:100%;height:520px;display:block;border-radius:6px;background:#2a2f3a;touch-action:none}
+button,select,input{font:inherit;padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
+button{cursor:pointer}button.on{background:var(--acc);color:#fff;border-color:var(--acc)}button.go{background:var(--ok);color:#fff;border-color:var(--ok)}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}small,.m{color:#8a92a3}
+label{display:block;margin:6px 0 2px}input[type=range]{width:100%}
+#log{max-height:140px;overflow:auto;font:12px monospace;white-space:pre-wrap}
+</style></head><body>
+<header><h1>Правка области</h1><span class="m">выберите место на модели → инструмент работает только внутри него; вне — не меняется</span><a href="/pipeline">панель</a> <a href="/proto">прототипы</a></header>
+<div class="ws">
+<div class="card"><canvas id="cv"></canvas>
+<div class="row"><button id="bs" class="on">Выделять: вкл (B)</button><button id="bm">режим: добавить</button>
+<span class="m">размер</span><input id="rs" type="range" min="0.1" max="2" step="0.05" value="0.5" style="width:120px">
+<button onclick="act('grow')">Расширить</button><button onclick="act('shrink')">Сузить</button><button onclick="act('invert')">Инвертировать</button><button onclick="act('clear')">Снять</button>
+<select id="rg" onchange="byRegion()"><option value="">по части…</option></select></div>
+<div id="info" class="m">Выделено: 0 вершин</div>
+<div class="row"><input id="nm" placeholder="имя области"><button onclick="saveSel()">Сохранить область</button></div>
+<div id="saved"></div></div>
+<div class="card"><b>Инструмент</b>
+<div class="row"><select id="op"><option value="smooth">Сгладить</option><option value="displace">Сместить</option></select></div>
+<label>Итераций сглаживания: <b id="vi">5</b></label><input id="it" type="range" min="1" max="30" value="5" oninput="vi.textContent=this.value">
+<label>Смещение по Z (для «Сместить»): <b id="vz">0.1</b></label><input id="dz" type="range" min="-0.5" max="0.5" step="0.01" value="0.1" oninput="vz.textContent=this.value">
+<label>Растушёвка края: <b id="vf">0.2</b></label><input id="ft" type="range" min="0" max="1" step="0.05" value="0.2" oninput="vf.textContent=this.value">
+<div class="row"><button class="go" onclick="apply()">Применить в области</button><button onclick="hist('undo')">Отменить</button><button onclick="hist('redo')">Вернуть</button></div>
+<div id="log" class="m">Журнал правок пуст.</div>
+<small>Вне выделения модель не меняется — это проверяется в тестах (tests/test_asset_ops.py).</small></div></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const $=id=>document.getElementById(id);let mode='add',sel=true,mesh,geo,col,busy=false,pending=null;
+const post=(p,d)=>fetch('/api/edit/'+p,{method:'POST',body:JSON.stringify(d||{})}).then(r=>r.json());
+const cv=$('cv'),R=new THREE.WebGLRenderer({canvas:cv,antialias:true}),S=new THREE.Scene(),C=new THREE.PerspectiveCamera(35,1,0.1,200);
+S.background=new THREE.Color(0x2a2f3a);S.add(new THREE.HemisphereLight(0xffffff,0x444455,1.1));const L=new THREE.DirectionalLight(0xffffff,0.8);L.position.set(2,4,6);S.add(L);
+const ctl=new THREE.OrbitControls(C,cv);
+function size(){const w=cv.clientWidth,h=cv.clientHeight;R.setSize(w,h,false);C.aspect=w/h;C.updateProjectionMatrix()}
+addEventListener('resize',size);
+async function load(){const m=await (await fetch('/api/edit/mesh')).json();
+ geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);geo.computeVertexNormals();
+ col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));paint([]);
+ mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.8,side:THREE.DoubleSide}));S.add(mesh);
+ geo.computeBoundingSphere();const b=geo.boundingSphere;ctl.target.copy(b.center);C.position.copy(b.center).add(new THREE.Vector3(0,0,b.radius*3.2));C.near=b.radius/50;C.far=b.radius*30;size();
+ const st=await (await fetch('/api/edit/state')).json();st.regions.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;$('rg').append(o)});
+ window.RAD=b.radius;paint(st.draft_vertices);info(st);}
+function paint(ids){for(let i=0;i<col.length;i+=3){col[i]=.85;col[i+1]=.7;col[i+2]=.6}
+ for(const v of ids){col[v*3]=.15;col[v*3+1]=.55;col[v*3+2]=1}geo.attributes.color.needsUpdate=true;$('info').textContent='Выделено: '+ids.length+' вершин'+(ids.length?'':' · вне области модель не меняется');}
+function res(r){if(r.error){alert(r.error);return}if(r.vertices)paint(r.vertices)}
+const act=a=>post('select',{action:a,steps:2}).then(res);
+const byRegion=()=>{const v=$('rg').value;if(v)post('select',{action:'region',name:v,mode}).then(res)};
+$('bs').onclick=()=>{sel=!sel;$('bs').classList.toggle('on',sel);$('bs').textContent='Выделять: '+(sel?'вкл':'выкл')+' (B)';ctl.enabled=!sel};
+$('bm').onclick=()=>{mode=mode=='add'?'sub':'add';$('bm').textContent='режим: '+(mode=='add'?'добавить':'вычесть')};
+addEventListener('keydown',e=>{if(e.target.tagName!='INPUT'&&e.key=='b')$('bs').onclick();if(e.target.tagName!='INPUT'&&e.key=='z')hist('undo')});
+ctl.enabled=false;let down=false;const ray=new THREE.Raycaster(),mv=new THREE.Vector2();
+function hit(e){const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,C);const h=ray.intersectObject(mesh)[0];
+ if(!h)return;pending={action:'brush',point:[h.point.x,h.point.y,h.point.z],radius:+$('rs').value*(window.RAD||1)*0.2,mode};flush()}
+async function flush(){if(busy||!pending)return;busy=true;const d=pending;pending=null;res(await post('select',d));busy=false;flush()}
+cv.addEventListener('pointerdown',e=>{if(sel&&e.button==0){down=true;cv.setPointerCapture(e.pointerId);hit(e)}});
+cv.addEventListener('pointermove',e=>{if(down)hit(e)});cv.addEventListener('pointerup',()=>down=false);
+async function saveSel(){const r=await post('save',{name:$('nm').value,feather:+$('ft').value*(window.RAD||1)*0.2});refresh()}
+async function apply(){const op=$('op').value,params=op=='smooth'?{iterations:+$('it').value}:{vector:[0,0,+$('dz').value]};
+ const r=await post('apply',{op,selection:'draft',params,feather:+$('ft').value*(window.RAD||1)*0.2});if(r.error){alert(r.error);return}await reloadMesh();refresh()}
+async function hist(a){await post(a);await reloadMesh();refresh()}
+async function reloadMesh(){const m=await (await fetch('/api/edit/mesh')).json();geo.attributes.position.array.set(m.v);geo.attributes.position.needsUpdate=true;geo.computeVertexNormals();geo.computeBoundingSphere()}
+async function refresh(){const st=await (await fetch('/api/edit/state')).json();info(st)}
+function info(st){$('log').textContent=st.ops.length?st.ops.map((o,i)=>(i+1)+'. '+o.op+(o.selection?' в области '+o.selection:'')+' '+JSON.stringify(o.params)).join('\n'):'Журнал правок пуст.';
+ $('saved').innerHTML=st.selections.map(s=>'<div class="row"><b>'+s.name+'</b> <span class="m">'+s.count+' вершин</span><button onclick="loadSel(\''+s.id+'\')">Выбрать</button><button onclick="delSel(\''+s.id+'\')">Удалить</button></div>').join('')}
+async function loadSel(id){res(await post('select',{action:'load',id}))}
+async function delSel(id){await post('delete',{id});refresh()}
+(function loop(){requestAnimationFrame(loop);ctl.update();R.render(S,C)})();
+load();
+</script></body></html>
