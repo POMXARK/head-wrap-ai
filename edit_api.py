@@ -118,6 +118,13 @@ def select(d):
         DRAFT.brush(d['point'], float(d['radius']), add=d.get('mode', 'add') == 'add')
     elif a == 'box':
         DRAFT.box(d['lo'], d['hi'], add=d.get('mode', 'add') == 'add', visible_from=d.get('visible_from'))
+    elif a == 'ids':    # vertex ids picked by the client (screen rectangle, front faces only)
+        ids = np.asarray(d['ids'], int)
+        ids = ids[(ids >= 0) & (ids < len(DRAFT.mask))]
+        if d.get('mode', 'add') == 'add':
+            DRAFT.mask[ids] = True
+        else:
+            DRAFT.mask[ids] = False
     elif a == 'region':
         if len(m.V) != len(REG['vertex']):
             raise ValueError('Части (по списку) заданы только для шаблона головы; на другой голове выделяйте кистью')

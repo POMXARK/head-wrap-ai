@@ -18,8 +18,8 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%}
 </style></head><body>
 <header><h1>Правка области</h1><span class="m">колесо — масштаб, правая кнопка — вращение; выберите место на модели → инструмент работает только внутри него; вне — не меняется</span><a href="/pipeline">панель</a> <a href="/proto">прототипы</a></header>
 <div class="ws">
-<div class="card"><canvas id="cv"></canvas>
-<div class="row"><button id="bs" class="on">Выделять: вкл (B)</button><button id="bm">режим: добавить</button>
+<div class="card"><div style="position:relative"><canvas id="cv"></canvas><div id="rb" style="position:absolute;border:2px dashed #4ade80;background:rgba(74,222,128,.15);display:none;pointer-events:none"></div></div>
+<div class="row"><button id="bs" class="on">Выделять: вкл (B)</button><button id="bt" onclick="tool=tool=='brush'?'box':'brush';this.textContent='инструмент: '+(tool=='brush'?'кисть':'рамка')">инструмент: кисть</button><button id="bm">режим: добавить</button>
 <span class="m">размер</span><input id="rs" type="range" min="0.1" max="2" step="0.05" value="0.5" style="width:120px">
 <button onclick="act('grow')">Расширить</button><button onclick="act('shrink')">Сузить</button><button onclick="act('invert')">Инвертировать</button><button onclick="act('clear')">Снять</button><button onclick="frame(true)">К голове</button><button onclick="frame(false)">Весь вид</button>
 <select id="rg" onchange="byRegion()"><option value="">по части…</option></select></div>
@@ -40,7 +40,7 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%}
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-const $=id=>document.getElementById(id);let NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null;
+const $=id=>document.getElementById(id);let tool='brush',NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null;
 const post=(p,d)=>fetch('/api/edit/'+p,{method:'POST',body:JSON.stringify(d||{})}).then(r=>r.json());
 const cv=$('cv'),R=new THREE.WebGLRenderer({canvas:cv,antialias:true}),S=new THREE.Scene(),C=new THREE.PerspectiveCamera(35,1,0.1,200);
 S.background=new THREE.Color(0x2a2f3a);S.add(new THREE.HemisphereLight(0xffffff,0x444455,1.1));const L=new THREE.DirectionalLight(0xffffff,0.8);L.position.set(2,4,6);S.add(L);
@@ -71,8 +71,16 @@ mb();let down=false;const ray=new THREE.Raycaster(),mv=new THREE.Vector2();
 function hit(e){const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,C);const h=ray.intersectObject(mesh)[0];
  if(!h||h.faceIndex>=NF)return;pending={action:'brush',point:[h.point.x,h.point.y,h.point.z],radius:+$('rs').value*(window.RAD||1)*0.2,mode};flush()}
 async function flush(){if(busy||!pending)return;busy=true;const d=pending;pending=null;res(await post('select',d));busy=false;flush()}
-cv.addEventListener('pointerdown',e=>{if(sel&&e.button==0){down=true;cv.setPointerCapture(e.pointerId);hit(e)}});
-cv.addEventListener('pointermove',e=>{if(down)hit(e)});cv.addEventListener('pointerup',()=>down=false);
+let p0=null;
+cv.addEventListener('pointerdown',e=>{if(sel&&e.button==0){down=true;cv.setPointerCapture(e.pointerId);if(tool=='box'){const r=cv.getBoundingClientRect();p0=[e.clientX-r.left,e.clientY-r.top]}else hit(e)}});
+cv.addEventListener('pointermove',e=>{if(!down)return;if(tool=='box'&&p0){const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,b=$('rb');
+ b.style.display='block';b.style.left=Math.min(x,p0[0])+'px';b.style.top=Math.min(y,p0[1])+'px';b.style.width=Math.abs(x-p0[0])+'px';b.style.height=Math.abs(y-p0[1])+'px'}else hit(e)});
+cv.addEventListener('pointerup',e=>{if(down&&tool=='box'&&p0){const r=cv.getBoundingClientRect();boxSel(p0[0],p0[1],e.clientX-r.left,e.clientY-r.top);$('rb').style.display='none';p0=null}down=false});
+function boxSel(x0,y0,x1,y1){const P=geo.attributes.position.array,N=geo.attributes.normal.array,w=cv.clientWidth,h=cv.clientHeight,v=new THREE.Vector3(),ids=[];
+ const lx=Math.min(x0,x1),hx=Math.max(x0,x1),ly=Math.min(y0,y1),hy=Math.max(y0,y1),cam=C.position;
+ mesh.updateMatrixWorld();for(let i=0;i<NH;i++){v.set(P[i*3],P[i*3+1],P[i*3+2]);const nx=N[i*3]*(cam.x-v.x)+N[i*3+1]*(cam.y-v.y)+N[i*3+2]*(cam.z-v.z);if(nx<=0)continue;
+  v.project(C);const sx=(v.x+1)/2*w,sy=(1-v.y)/2*h;if(sx>=lx&&sx<=hx&&sy>=ly&&sy<=hy)ids.push(i)}
+ post('select',{action:'ids',ids,mode}).then(res)}
 async function saveSel(){const r=await post('save',{name:$('nm').value,feather:+$('ft').value*(window.RAD||1)*0.2});refresh()}
 async function apply(){const op=$('op').value,params=op=='smooth'?{iterations:+$('it').value}:{vector:[0,0,+$('dz').value]};
  const r=await post('apply',{op,selection:'draft',params,feather:+$('ft').value*(window.RAD||1)*0.2});if(r.error){alert(r.error);return}await reloadMesh();refresh()}

@@ -63,6 +63,14 @@ def test_replace_head_and_undo():
     E.history('undo')
 
 
+def test_ids_select():
+    E._init()
+    E.select({'action': 'clear'})
+    assert E.select({'action': 'ids', 'ids': [1, 2, 3, 10 ** 9]})['count'] == 3
+    assert E.select({'action': 'ids', 'ids': [2], 'mode': 'sub'})['count'] == 2
+    E.select({'action': 'clear'})
+
+
 if __name__ == '__main__':
     for k, f in list(globals().items()):
         if k.startswith('test_'):
