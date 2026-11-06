@@ -76,8 +76,8 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 </style></head><body>
 <header class="top">
  <h1>Правка области</h1>
- <button class="btn" id="bu" title="Отменить (Z)" onclick="hist('undo')">↶ Отменить <kbd>Z</kbd></button>
- <button class="btn" id="br" title="Вернуть (Shift+Z)" onclick="hist('redo')">↷ Вернуть</button>
+ <button class="btn" id="bu" title="Отменить последнюю правку модели" onclick="hist('undo')">↶ Отменить правку</button>
+ <button class="btn" id="br" title="Вернуть правку модели" onclick="hist('redo')">↷ Вернуть правку</button>
  <span class="sep"></span>
  <button class="btn" id="bb" onclick="toggleBefore()" title="Сравнить с состоянием до последней правки">Показать «до»</button>
  <span class="sp"></span>
@@ -102,7 +102,7 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
   <details class="sec" open><summary>1. Область</summary><div class="bd">
    <div class="seg" role="group" aria-label="Режим выделения"><button id="m-add" aria-pressed="true" onclick="setMode('add')">Добавить</button><button id="m-sub" aria-pressed="false" onclick="setMode('sub')">Вычесть</button></div>
    <div class="fld" id="f-size"><div class="lb"><span>Размер кисти</span><b id="vr">0.5</b></div><input id="rs" type="range" min="0.1" max="2" step="0.05" value="0.5" oninput="vr.textContent=this.value" aria-label="Размер кисти"></div>
-   <div class="grid2"><button class="btn" onclick="act('grow')" title="Расширить на 2 шага по сетке">Расширить</button><button class="btn" onclick="act('shrink')">Сузить</button><button class="btn" onclick="act('invert')">Инвертировать</button><button class="btn" onclick="act('clear')" title="Esc">Снять</button></div>
+   <div class="grid2"><button class="btn" onclick="act('grow')" title="Расширить на 2 шага по сетке">Расширить</button><button class="btn" onclick="act('shrink')">Сузить</button><button class="btn" onclick="act('invert')">Инвертировать</button><button class="btn" onclick="act('clear')" title="Esc">Снять</button><button class="btn" id="bus" onclick="undoSel(false)" title="Z">↶ Шаг назад</button><button class="btn" id="brs" onclick="undoSel(true)" title="Shift+Z">↷ Шаг вперёд</button></div>
    <select id="rg" onchange="byRegion()" aria-label="Выбрать часть"><option value="">Выбрать часть модели…</option></select>
    <div class="fld"><div class="lb"><span>Сохранить область под именем</span></div><div class="grid2" style="grid-template-columns:1fr auto"><input id="nm" type="text" placeholder="например, левый глаз"><button class="btn" onclick="saveSel()">Сохранить</button></div></div>
    <div id="saved"></div>
@@ -136,7 +136,7 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 <script>
 window.addEventListener('error',e=>{console.log(e.filename,e.lineno,e.colno,e.error&&e.error.stack);fetch('/api/edit/state?err='+encodeURIComponent(e.message+' @'+e.filename+':'+e.lineno+':'+e.colno+' '+(e.error&&e.error.stack)));const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка скрипта: '+e.message;t.append(d)}});
 window.addEventListener('unhandledrejection',e=>{const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка: '+(e.reason&&e.reason.message||e.reason);t.append(d)}});
-const $=id=>document.getElementById(id);let tool='brush',NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null,nsel=0,nops=0;
+const $=id=>document.getElementById(id);let selHist=[],selRedo=[],curIds=[],tool='brush',NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null,nsel=0,nops=0;
 const post=(p,d)=>fetch('/api/edit/'+p,{method:'POST',body:JSON.stringify(d||{})}).then(r=>r.json());
 function toast(t,k){const e=document.createElement('div');e.className='toast '+(k||'');e.textContent=t;$('toasts').append(e);setTimeout(()=>e.remove(),k=='err'?7000:3500)}
 const setSt=t=>$('st').textContent=t;
@@ -152,13 +152,13 @@ function frame(headOnly){const p=geo.attributes.position.array,n=headOnly?NH:p.l
  ctl.target.copy(c);C.position.set(c.x,c.y,c.z+r*2.6);C.near=r/50;C.far=r*60;C.updateProjectionMatrix();window.RAD=r;ctl.update()}
 /* инструменты и режимы */
 function hints(){const t={brush:'<span><kbd>ЛКМ</kbd> красить</span><span><kbd>ПКМ</kbd> вращать</span><span><kbd>колесо</kbd> масштаб</span>',box:'<span><kbd>ЛКМ</kbd> обвести рамкой</span><span><kbd>ПКМ</kbd> вращать</span><span><kbd>колесо</kbd> масштаб</span>',orbit:'<span><kbd>ЛКМ</kbd> вращать</span><span><kbd>ПКМ</kbd> сдвинуть</span><span><kbd>колесо</kbd> масштаб</span>'}[tool];
- $('hints').innerHTML=t+'<span><kbd>Esc</kbd> снять выделение</span>';$('f-size').hidden=tool!='brush'}
+ $('hints').innerHTML=t+'<span><kbd>Z</kbd> шаг назад</span><span><kbd>Esc</kbd> снять выделение</span>';$('f-size').hidden=tool!='brush'}
 function setTool(t){tool=t;sel=t!='orbit';for(const k of['brush','box','orbit'])$('t-'+k).setAttribute('aria-pressed',k==t);mb();hints();cv.style.cursor=sel?'crosshair':'grab'}
 function setMode(m){mode=m;$('m-add').setAttribute('aria-pressed',m=='add');$('m-sub').setAttribute('aria-pressed',m=='sub')}
 function setOp(o){$('o-smooth').setAttribute('aria-pressed',o=='smooth');$('o-displace').setAttribute('aria-pressed',o=='displace');$('f-it').hidden=o!='smooth';$('f-dz').hidden=o!='displace';window.OP=o}
 window.OP='smooth';
 function sync(){$('info').innerHTML='Выделено: <b>'+nsel+'</b> вершин';$('empty').hidden=nsel>0&&!window.NOGL;$('ba').disabled=!nsel;
- $('why').textContent=nsel?'Изменится только выделенное место и мягкая кромка вокруг.':'Сначала выделите место на модели.';$('bsg').disabled=!nsel;$('bu').disabled=!nops}
+ $('why').textContent=nsel?'Изменится только выделенное место и мягкая кромка вокруг.':'Сначала выделите место на модели.';$('bsg').disabled=!nsel;$('bu').disabled=!nops;$('bus').disabled=!selHist.length;$('brs').disabled=!selRedo.length}
 async function load(){const m=await (await fetch('/api/edit/mesh')).json();
  geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);geo.computeVertexNormals();
  col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));paint([]);
@@ -167,19 +167,22 @@ async function load(){const m=await (await fetch('/api/edit/mesh')).json();
  const st=await (await fetch('/api/edit/state')).json();st.regions.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;$('rg').append(o)});
  paint(st.draft_vertices);info(st);setTool('brush');setSt('Готово')}
 function paint(ids){for(let i=0;i<col.length;i+=3){const b=i/3>=NH&&NH>0;col[i]=b?.55:.85;col[i+1]=b?.6:.7;col[i+2]=b?.7:.6}
- for(const v of ids){col[v*3]=.15;col[v*3+1]=.55;col[v*3+2]=1}geo.attributes.color.needsUpdate=true;nsel=ids.length;sync()}
+ for(const v of ids){col[v*3]=.15;col[v*3+1]=.55;col[v*3+2]=1}geo.attributes.color.needsUpdate=true;curIds=ids;nsel=ids.length;sync()}
 function res(r){if(r.error){toast(r.error,'err');return}if(r.vertices)paint(r.vertices)}
-const act=a=>post('select',{action:a,steps:2}).then(r=>{res(r);if(a=='clear'&&!r.error)toast('Выделение снято')});
-const byRegion=()=>{const v=$('rg').value;if(v)post('select',{action:'region',name:v,mode}).then(res)};
+function snap(){if(selHist.length&&selHist[selHist.length-1].length==curIds.length&&selHist[selHist.length-1].every((v,i)=>v==curIds[i]))return;selHist.push(curIds.slice());if(selHist.length>50)selHist.shift();selRedo=[];sync()}
+async function undoSel(redo){const from=redo?selRedo:selHist,to=redo?selHist:selRedo;if(!from.length)return false;to.push(curIds.slice());const ids=from.pop();res(await post('select',{action:'set',ids}));toast(redo?'Выделение возвращено':'Выделение отменено');return true}
+async function undoAny(redo){if(await undoSel(redo))return;hist(redo?'redo':'undo')}
+const act=a=>{snap();return post('select',{action:a,steps:2}).then(r=>{res(r);if(a=='clear'&&!r.error)toast('Выделение снято (Z — вернуть)')})};
+const byRegion=()=>{const v=$('rg').value;if(v){snap();post('select',{action:'region',name:v,mode}).then(res)}};
 const mb=()=>{ctl.mouseButtons.LEFT=sel?-1:THREE.MOUSE.ROTATE;ctl.mouseButtons.RIGHT=sel?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN};
-addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.ctrlKey||e.metaKey)return;const k=e.code;/* физические клавиши: работают и в русской раскладке */
- if(k=='KeyB')setTool('brush');else if(k=='KeyX')setTool('box');else if(k=='KeyR')setTool('orbit');else if(k=='KeyZ')hist(e.shiftKey?'redo':'undo');else if(k=='KeyY')hist('redo');else if(k=='Escape')act('clear')});
+addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.altKey)return;const k=e.code;/* физические клавиши: работают и в русской раскладке */
+ if(k=='KeyB')setTool('brush');else if(k=='KeyX')setTool('box');else if(k=='KeyR')setTool('orbit');else if(k=='KeyZ'){e.preventDefault();undoAny(e.shiftKey)}else if(k=='KeyY'){e.preventDefault();undoAny(true)}else if(k=='Escape')act('clear')});
 let down=false;const ray=new THREE.Raycaster(),mv=new THREE.Vector2();
 function hit(e){const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,C);const h=ray.intersectObject(mesh)[0];
  if(!h||h.faceIndex>=NF)return;pending={action:'brush',point:[h.point.x,h.point.y,h.point.z],radius:+$('rs').value*(window.RAD||1)*0.2,mode};flush()}
 async function flush(){if(busy||!pending)return;busy=true;const d=pending;pending=null;res(await post('select',d));busy=false;flush()}
 let p0=null;
-cv.addEventListener('pointerdown',e=>{if(sel&&e.button==0){down=true;cv.setPointerCapture(e.pointerId);if(tool=='box'){const r=cv.getBoundingClientRect();p0=[e.clientX-r.left,e.clientY-r.top]}else hit(e)}});
+cv.addEventListener('pointerdown',e=>{if(sel&&e.button==0){snap();down=true;cv.setPointerCapture(e.pointerId);if(tool=='box'){const r=cv.getBoundingClientRect();p0=[e.clientX-r.left,e.clientY-r.top]}else hit(e)}});
 cv.addEventListener('pointermove',e=>{if(!down)return;if(tool=='box'&&p0){const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,b=$('rb');
  b.style.display='block';b.style.left=Math.min(x,p0[0])+'px';b.style.top=Math.min(y,p0[1])+'px';b.style.width=Math.abs(x-p0[0])+'px';b.style.height=Math.abs(y-p0[1])+'px'}else hit(e)});
 cv.addEventListener('pointerup',e=>{if(down&&tool=='box'&&p0){const r=cv.getBoundingClientRect();boxSel(p0[0],p0[1],e.clientX-r.left,e.clientY-r.top);$('rb').style.display='none';p0=null}down=false});
@@ -225,7 +228,7 @@ function info(st){if(!$('dn').options.length)Object.entries(st.donors).forEach((
  nops=st.ops.length;sync();
  $('log').innerHTML=st.ops.length?st.ops.map((o,i)=>'<li><span class="mut">'+(i+1)+'.</span><span>'+esc(o.op)+(o.selection?' · '+esc(o.selection):'')+' <span class="mut">'+esc(JSON.stringify(o.params))+'</span>'+(o.stale_scores?'<br><span class="w">⚠ оценка устарела: после неё были правки</span>':'')+'</span></li>').join(''):'<li class="mut">Пока пусто</li>';
  $('saved').innerHTML=st.selections.map(s=>'<div class="saved"><span class="n"><b>'+esc(s.name)+'</b> <span class="mut">'+s.count+' вершин</span></span><button class="btn" onclick="loadSel(\''+s.id+'\')">Выбрать</button><button class="btn" aria-label="Удалить область" onclick="delSel(\''+s.id+'\')">✕</button></div>').join('')}
-async function loadSel(id){res(await post('select',{action:'load',id}))}
+async function loadSel(id){snap();res(await post('select',{action:'load',id}))}
 async function delSel(id){await post('delete',{id});refresh()}
 (function loop(){requestAnimationFrame(loop);ctl.update();R.render(S,C)})();
 load();

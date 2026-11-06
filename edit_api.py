@@ -193,6 +193,10 @@ def select(d):
             DRAFT.mask[ids] = True
         else:
             DRAFT.mask[ids] = False
+    elif a == 'set':    # exact restore of a draft (undo/redo of selection steps in the UI)
+        DRAFT.mask[:] = False
+        ids = np.asarray(d['ids'], int)
+        DRAFT.mask[ids[(ids >= 0) & (ids < len(DRAFT.mask))]] = True
     elif a == 'region':
         if len(m.V) != len(REG['vertex']):
             raise ValueError('Части (по списку) заданы только для шаблона головы; на другой голове выделяйте кистью')
