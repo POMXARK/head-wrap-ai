@@ -5,7 +5,7 @@ sys.path.insert(0, H)
 css = open(os.path.join(H, 'ui.css'), encoding='utf-8').read()
 for need in ('prefers-color-scheme:dark', ':focus-visible', '[hidden]{display:none!important}', 'prefers-reduced-motion', '--acc', 'min-height:36px'):
     assert need in css, need
-for f, ids in (('index.html', ('pr', 'lg', 'bsave', 'h-go')), ('model.html', ('f', 't', 'n', 'fc', 'res')), ('review.html', ('st', 'foc', 'cur', 'hist'))):
+for f, ids in (('index.html', ('pr', 'lg', 'bsave', 'h-go')), ('model.html', ('f', 't', 'n', 'fc', 'res', 'pv', 'sv')), ('review.html', ('st', 'foc', 'cur', 'hist'))):
     h = open(os.path.join(H, f), encoding='utf-8').read()
     assert 'href="/ui.css"' in h and '<header class="top">' in h and 'lang="ru"' in h and 'viewport' in h, f
     assert 'alert(' not in h and 'confirm(' not in h and 'prompt(' not in h, f

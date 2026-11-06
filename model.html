@@ -5,20 +5,35 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px 10px;
 .tw{overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
 .row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--s3)}
 .acts{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center}
+.prev{position:relative;border:1px solid var(--line);border-radius:var(--r);background:#222733;overflow:hidden;min-height:320px}
+.prev canvas{display:block;width:100%;height:100%}
+.prev .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:#c9cfdb}
+.prev .cap{position:absolute;left:8px;bottom:8px;padding:2px 10px;border-radius:12px;background:rgba(0,0,0,.55);color:#fff;font-size:12px}
+.two{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:var(--s3);align-items:start}
+.two .prev{height:380px}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--panel2)}tbody tr.on{background:var(--acc-soft)}
+@media(max-width:900px){.two{grid-template-columns:1fr}}
 </style></head><body>
 <header class="top"><h1>Модель: части и замена</h1><span class="sp"></span><a href="/">Главная</a><a href="/pipeline">Конвейер</a><a href="/edit">Правка</a><a href="/review">Сравнение</a></header>
 <main class="wrap">
  <section><h2>1. Выберите файл</h2><p class="lead">Любая GLB-модель, не только голова. Исходный файл не меняется — результат всегда пишется в новый файл.</p></section>
  <div class="fld" style="max-width:480px"><label for="f">Файл</label><select id="f" onchange="show()"></select></div>
- <div class="tw" id="t" aria-live="polite"><div class="card mut">Загрузка…</div></div>
+ <div class="two">
+  <div class="tw" id="t" aria-live="polite"><div class="card mut">Загрузка…</div></div>
+  <div class="prev" id="pv" role="img" aria-label="Предпросмотр модели"><div class="cap" id="pvc">Вся модель</div></div>
+ </div>
+ <p class="help">Щёлкните строку таблицы или саму модель — выбранная часть подсветится, остальные станут прозрачными. Вращать — левая кнопка, масштаб — колесо, сдвиг — правая кнопка.</p>
  <section class="card" aria-labelledby="h2">
   <h2 id="h2">2. Заменить, добавить или убрать часть</h2>
   <p class="help">Выберите часть в файле <b id="tg"></b>, затем — откуда брать новую.</p>
-  <div class="row2">
-   <div class="fld"><label for="n">Часть в этом файле</label><select id="n"></select></div>
+  <div class="two" style="grid-template-columns:minmax(0,1fr) minmax(260px,1fr)">
+  <div class="row2" style="grid-template-columns:1fr">
+   <div class="fld"><label for="n">Часть в этом файле</label><select id="n" onchange="pick(this.value)"></select></div>
    <div class="fld"><label for="sf">Файл-источник</label><select id="sf" onchange="sparts()"></select></div>
-   <div class="fld"><label for="sn">Часть-источник</label><select id="sn"></select></div>
+   <div class="fld"><label for="sn">Часть-источник</label><select id="sn" onchange="spick()"></select></div>
    <div class="fld"><label for="o">Имя нового файла (необязательно)</label><input id="o" type="text" placeholder="work/new.glb"></div>
+  </div>
+  <div class="prev" id="sv" role="img" aria-label="Предпросмотр части-источника" style="height:300px"><div class="cap" id="svc">Источник</div></div>
   </div>
   <div class="acts"><button class="btn primary" id="b-replace" onclick="go('replace')" title="Заменить выбранную часть на часть-источник">Заменить часть</button><button class="btn" id="b-add" onclick="go('add')" title="Добавить часть-источник в файл">Добавить из другого файла</button><button class="btn danger" id="b-remove" onclick="go('remove')" title="Убрать выбранную часть. Исходный файл останется нетронутым">Убрать часть</button></div>
  </section>
@@ -35,16 +50,48 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px 10px;
  <div class="card" id="res" aria-live="polite" hidden></div>
 </main>
 <footer class="status"><span id="st">Готово</span></footer><div id="toasts" aria-live="polite"></div>
+<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 const $=i=>document.getElementById(i);let FILES=[];
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function toast(t,k){const e=document.createElement('div');e.className='toast '+(k||'');e.textContent=t;$('toasts').appendChild(e);setTimeout(()=>e.remove(),k=='err'?7000:3500)}
+/* предпросмотр: three.js, один класс на оба окна; без WebGL/CDN страница работает без 3D */
+const norm=n=>String(n||'').replace(/\s/g,'_').replace(/[\[\].:\/]/g,'');
+function Viewer(box,cap,onPick){
+ const V={box,cap,obj:null,sel:null};
+ if(!window.THREE||!THREE.GLTFLoader){V.off='Предпросмотр недоступен: не загрузилась библиотека 3D (нужен интернет).';box.insertAdjacentHTML('afterbegin','<div class="msg">'+V.off+'</div>');return V}
+ try{V.R=new THREE.WebGLRenderer({antialias:true,alpha:true})}catch(e){V.off='Предпросмотр недоступен: в браузере выключен WebGL.';box.insertAdjacentHTML('afterbegin','<div class="msg">'+V.off+'</div>');return V}
+ V.R.setPixelRatio(Math.min(2,devicePixelRatio||1));box.insertBefore(V.R.domElement,box.firstChild);
+ V.S=new THREE.Scene();V.C=new THREE.PerspectiveCamera(35,1,.01,100);
+ V.S.add(new THREE.HemisphereLight(0xffffff,0x445566,.9));const d=new THREE.DirectionalLight(0xffffff,.8);d.position.set(1,2,3);V.S.add(d);
+ V.ctl=new THREE.OrbitControls(V.C,V.R.domElement);V.ctl.enableDamping=true;
+ V.size=()=>{const w=box.clientWidth,h=box.clientHeight;if(w&&h){V.R.setSize(w,h,false);V.C.aspect=w/h;V.C.updateProjectionMatrix()}};
+ (function loop(){requestAnimationFrame(loop);V.size();V.ctl.update();V.R.render(V.S,V.C)})();
+ let dn=null;V.R.domElement.addEventListener('pointerdown',e=>{dn=[e.clientX,e.clientY]});
+ V.R.domElement.addEventListener('pointerup',e=>{if(!dn||Math.hypot(e.clientX-dn[0],e.clientY-dn[1])>4||!V.obj||!onPick)return;
+  const r=V.R.domElement.getBoundingClientRect(),m=new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),rc=new THREE.Raycaster();rc.setFromCamera(m,V.C);
+  const h=rc.intersectObject(V.obj,true)[0];if(h)onPick(V.partOf(h.object))});
+ V.partOf=o=>{while(o){const k=(V.names||[]).find(n=>norm(n)==o.name);if(k)return k;o=o.parent}return null};
+ V.load=async(file,names)=>{V.names=names;if(V.obj){V.S.remove(V.obj);V.obj=null}box.classList.add('loading');
+  return new Promise(res=>new THREE.GLTFLoader().load('/api/file?f='+encodeURIComponent(file),g=>{
+   g.scene.traverse(o=>{if(o.isMesh){o.material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone()}});
+   V.obj=g.scene;V.S.add(V.obj);V.frame();V.hl(V.sel);res(true)},null,err=>{box.querySelector('.msg')||box.insertAdjacentHTML('afterbegin','<div class="msg">Не удалось показать файл</div>');res(false)}))};
+ V.frame=()=>{const b=new THREE.Box3().setFromObject(V.obj),c=b.getCenter(new THREE.Vector3()),sz=b.getSize(new THREE.Vector3()),r=Math.max(sz.x,sz.y,sz.z)||1;
+  V.C.position.copy(c).add(new THREE.Vector3(0,0,r*2.6));V.C.near=r/100;V.C.far=r*50;V.C.updateProjectionMatrix();V.ctl.target.copy(c);V.ctl.update()};
+ V.hl=name=>{V.sel=name;if(!V.obj)return;V.obj.traverse(o=>{if(!o.isMesh)return;const on=!name||V.partOf(o)==name;
+   (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{m.transparent=!on;m.opacity=on?1:.18;m.depthWrite=on;m.needsUpdate=true})})};
+ return V}
+let PV=null,SV=null,PARTS=[];
+function pick(name){if(!name)return;$('n').value=name;document.querySelectorAll('#t tbody tr').forEach(r=>r.classList.toggle('on',r.dataset.n==name));$('pvc').textContent='Часть: '+name;PV&&PV.hl&&PV.hl(name)}
+async function spick(){if(SV&&SV.hl){SV.hl($('sn').value);$('svc').textContent='Источник: '+$('sn').value}}
 const opts=a=>a.map(x=>`<option>${esc(x)}</option>`).join('');
-async function init(){const cur=$('f').value;FILES=(await (await fetch('/api/model')).json()).files;$('f').innerHTML=$('sf').innerHTML=opts(FILES);if(FILES.includes(cur))$('f').value=cur;await show();await sparts()}
+async function init(){PV=PV||Viewer($('pv'),$('pvc'),pick);SV=SV||Viewer($('sv'),$('svc'),n=>{if(n){$('sn').value=n;spick()}});const cur=$('f').value;FILES=(await (await fetch('/api/model')).json()).files;$('f').innerHTML=$('sf').innerHTML=opts(FILES);if(FILES.includes(cur))$('f').value=cur;await show();await sparts()}
 async function show(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('f').value))).json();$('tg').textContent=$('f').value;
-$('t').innerHTML='<table><thead><tr><th>Часть</th><th>Вершин</th><th>Треугольников</th><th>UV</th><th>Текстура</th><th>Габариты (min … max)</th></tr></thead><tbody>'+r.parts.map(p=>`<tr><td><b>${esc(p.node)}</b></td><td>${p.vertices}</td><td>${p.triangles}</td><td>${p.uv?'да':'нет'}</td><td>${p.texture?p.texture.join('×'):'—'}</td><td>${esc(p.bbox_min)} … ${esc(p.bbox_max)}</td></tr>`).join('')+'</tbody></table>';
-$('n').innerHTML=opts(r.parts.map(p=>p.node))}
-async function sparts(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('sf').value))).json();$('sn').innerHTML=opts(r.parts.map(p=>p.node))}
+PARTS=r.parts.map(p=>p.node);$('t').innerHTML='<table><thead><tr><th>Часть</th><th>Вершин</th><th>Треугольников</th><th>UV</th><th>Текстура</th><th>Габариты (min … max)</th></tr></thead><tbody>'+r.parts.map(p=>`<tr data-n="${esc(p.node)}" tabindex="0" onclick="pick(this.dataset.n)" onkeydown="if(event.key=='Enter')pick(this.dataset.n)"><td><b>${esc(p.node)}</b></td><td>${p.vertices}</td><td>${p.triangles}</td><td>${p.uv?'да':'нет'}</td><td>${p.texture?p.texture.join('×'):'—'}</td><td>${esc(p.bbox_min)} … ${esc(p.bbox_max)}</td></tr>`).join('')+'</tbody></table>';
+$('n').innerHTML=opts(PARTS);$('pvc').textContent='Вся модель';if(PV&&PV.load){PV.sel=null;await PV.load($('f').value,PARTS)}}
+async function sparts(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('sf').value))).json();$('sn').innerHTML=opts(r.parts.map(p=>p.node));if(SV&&SV.load){SV.sel=$('sn').value;await SV.load($('sf').value,r.parts.map(p=>p.node));$('svc').textContent='Источник: '+$('sn').value}}
 const NAMES={replace:'Замена',add:'Добавление',remove:'Удаление',remesh:'Ремеш',uv:'Новая UV'};
 async function go(op){const bs=document.querySelectorAll('.acts .btn');bs.forEach(b=>b.disabled=true);$('st').textContent='Выполняю: '+NAMES[op]+'…';
  try{const r=await fetch('/api/model',{method:'POST',body:JSON.stringify({op,target:$('f').value,node:$('n').value,source:$('sf').value,snode:$('sn').value,out:$('o').value,faces:$('fc').value,edge:$('ed').value,subdivide:$('sd').value})});
