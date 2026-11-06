@@ -61,6 +61,22 @@ def test_keep_scale():
     assert rep['scale'] == 1.0
 
 
+def test_bridge_closes_rings():
+    from test_replace_part import tube, cap
+    aV, aF = tube(1.0, 1)
+    bV, bF = tube(1.2, 1, origin=(0, 0.5, 0))
+    V = np.vstack([aV, bV + np.array([0.1, 0, 0])])
+    ra = RP.boundary_loops(aF)[0]
+    rb = [i + len(aV) for i in RP.boundary_loops(bF)[0]]
+    F, stretch = RP.bridge(V, ra, rb)
+    assert len(F) == len(ra) + len(rb) and stretch < 1.5
+    # a closed band: every ring edge is used by exactly one strip triangle
+    e = np.sort(np.concatenate([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]]), 1)
+    u, c = np.unique(e, axis=0, return_counts=True)
+    ring_edges = {tuple(sorted((r[k], r[(k + 1) % len(r)]))) for r in (ra, rb) for k in range(len(r))}
+    assert all(c[(u == list(x)).all(1)][0] == 1 for x in ring_edges)
+
+
 if __name__ == '__main__':
     for k, f in list(globals().items()):
         if k.startswith('test_'):

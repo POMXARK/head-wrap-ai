@@ -73,9 +73,19 @@ def replace_head(d):
     d_ring = max(RP.boundary_loops(dF), key=len)
     V, F, rep = RP.replace(body.V, body.F, t_ring, dV, dF, d_ring, d.get('scale', 'match_ring'), outward=[0, 1, 0])
     off = rep['donor_offset']
-    A.replace_mesh('head', V[off:], F[len(body.F):] - off,
+    seam = d.get('seam', 'bridge')
+    hV, hF = V[off:], F[len(body.F):] - off
+    if seam == 'bridge':
+        # copies of the body ring join the head part; the strip runs from the donor ring to them
+        ring_copy = np.arange(len(hV), len(hV) + len(t_ring))
+        hV = np.vstack([hV, body.V[t_ring]])
+        strip, stretch = RP.bridge(hV, d_ring, ring_copy)
+        hF = np.vstack([hF, strip])
+        rep['seam_stretch'] = round(stretch, 3)
+    A.replace_mesh('head', hV, hF,
                    {'donor': {'asset': d['donor'], 'part': 'head'}, 'socket': 'neck', 'scale': d.get('scale', 'match_ring'),
-                    'seam': 'overlap'}, scores={'after': {'ring_gap': round(rep['ring_gap'], 4), 'scale': round(rep['scale'], 4)}})
+                    'seam': seam}, scores={'after': {'ring_gap': round(rep['ring_gap'], 4), 'scale': round(rep['scale'], 4),
+                                                     **({'seam_stretch': rep['seam_stretch']} if 'seam_stretch' in rep else {})}})
     DRAFT = Selection(A.parts['head'])
     return {'report': rep, 'donors': DONORS}
 
@@ -109,6 +119,8 @@ def select(d):
     elif a == 'box':
         DRAFT.box(d['lo'], d['hi'], add=d.get('mode', 'add') == 'add', visible_from=d.get('visible_from'))
     elif a == 'region':
+        if len(m.V) != len(REG['vertex']):
+            raise ValueError('Части (по списку) заданы только для шаблона головы; на другой голове выделяйте кистью')
         r = Selection.from_region(m, REG, d['name'])
         DRAFT.union(r) if d.get('mode', 'add') == 'add' else DRAFT.subtract(r)
     elif a == 'grow':

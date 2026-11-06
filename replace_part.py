@@ -99,3 +99,50 @@ def replace(tV, tF, t_ring, dV, dF, d_ring, scale='match_ring', outward=None):
     F = np.vstack([np.asarray(tF), np.asarray(dF) + len(tV)])
     rep = {'scale': float(k), 'ring_gap': float(best / tr), 'donor_offset': len(tV)}
     return V, F, rep
+
+
+def _angles(P, c, n):
+    """angle of each ring point around the axis n (in a basis chosen from n)"""
+    a = np.cross(n, [1, 0, 0] if abs(n[0]) < .9 else [0, 1, 0])
+    a /= np.linalg.norm(a)
+    b = np.cross(n, a)
+    return np.arctan2((P - c) @ b, (P - c) @ a)
+
+
+def bridge(V, ringA, ringB):
+    """triangle strip between two rings (vertex ids into V), merged by angle around the common axis.
+    Returns faces (list of [i,j,k]) and the longest strip edge divided by the mean ring radius (seam stretch)."""
+    A, B = np.asarray(ringA), np.asarray(ringB)
+    c = (V[A].mean(0) + V[B].mean(0)) / 2
+    n = ring_frame(V, A)[2]
+    ang_a, ang_b = _angles(V[A], c, n), _angles(V[B], c, n)
+    A, ang_a = A[np.argsort(ang_a)], np.sort(ang_a)
+    B, ang_b = B[np.argsort(ang_b)], np.sort(ang_b)
+    # start both at the closest angles, then walk around once
+    i0 = 0
+    j0 = int(np.argmin(np.abs(np.angle(np.exp(1j * (ang_b - ang_a[0]))))))
+    na, nb = len(A), len(B)
+    i = j = 0
+    F = []
+    while i < na or j < nb:
+        ai, bj = A[(i0 + i) % na], B[(j0 + j) % nb]
+        if i >= na:
+            adv_b = True
+        elif j >= nb:
+            adv_b = False
+        else:   # advance the side whose next point is angularly closer
+            an = A[(i0 + i + 1) % na]
+            bn = B[(j0 + j + 1) % nb]
+            da = abs(np.angle(np.exp(1j * (ang_a[(i0 + i + 1) % na] - ang_b[(j0 + j) % nb]))))
+            db = abs(np.angle(np.exp(1j * (ang_b[(j0 + j + 1) % nb] - ang_a[(i0 + i) % na]))))
+            adv_b = db < da
+        if adv_b:
+            F.append([ai, bj, B[(j0 + j + 1) % nb]])
+            j += 1
+        else:
+            F.append([ai, bj, A[(i0 + i + 1) % na]])
+            i += 1
+    F = np.array(F)
+    e = np.concatenate([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]])
+    longest = np.linalg.norm(V[e[:, 0]] - V[e[:, 1]], axis=1).max()
+    return F, float(longest / ring_frame(V, A)[1])
