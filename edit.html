@@ -52,6 +52,10 @@ kbd{font:11px ui-monospace,monospace;padding:1px 5px;border:1px solid var(--line
 .seg button{min-height:36px;border:0;background:var(--panel);cursor:pointer}
 .seg button+button{border-left:1px solid var(--line)}
 .seg button[aria-pressed=true]{background:var(--acc-soft);font-weight:600}
+.opg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}.opg button{min-height:36px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);cursor:pointer}.opg button:hover{background:var(--panel2)}.opg button[aria-pressed=true]{background:var(--acc-soft);border-color:var(--acc);font-weight:600}
+#uvc{position:absolute;inset:0;width:100%;height:100%;display:none;touch-action:none}
+#vm{width:250px}
+input[type=color]{width:100%;height:36px;padding:2px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
 .fld{display:flex;flex-direction:column;gap:4px}
 .fld .lb{display:flex;justify-content:space-between;color:var(--mut);font-size:13px}
@@ -80,6 +84,8 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
  <button class="btn" id="br" title="Вернуть правку модели" onclick="hist('redo')">↷ Вернуть правку</button>
  <span class="sep"></span>
  <button class="btn" id="bb" onclick="toggleBefore()" title="Сравнить с состоянием до последней правки">Показать «до»</button>
+ <span class="sep"></span>
+ <div class="seg" id="vm" role="group" aria-label="Что показывать"><button id="v-mesh" aria-pressed="true" onclick="setView('mesh')">Сетка</button><button id="v-tex" aria-pressed="false" onclick="setView('tex')">Текстура</button><button id="v-uv" aria-pressed="false" onclick="setView('uv')">UV</button></div>
  <span class="sp"></span>
  <button class="btn" onclick="frame(true)">К голове</button>
  <button class="btn" onclick="frame(false)">Весь вид</button>
@@ -90,10 +96,12 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
  <nav class="tools" aria-label="Инструменты">
   <button class="tool" id="t-brush" aria-pressed="true" title="Кисть: проведите по модели (B)" onclick="setTool('brush')"><svg viewBox="0 0 24 24"><path d="M4 20c3 0 4-1 4-3a3 3 0 0 1 3-3l8-8a2 2 0 0 0-3-3l-8 8a3 3 0 0 0-3 3c0 3-1 4-1 6z"/></svg>Кисть<kbd>B</kbd></button>
   <button class="tool" id="t-box" aria-pressed="false" title="Рамка: обведите место (X)" onclick="setTool('box')"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" stroke-dasharray="3 3"/></svg>Рамка<kbd>X</kbd></button>
+  <button class="tool" id="t-grab" aria-pressed="false" title="Двигать выделенное: потяните по модели (G)" onclick="setTool('grab')"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>Двигать<kbd>G</kbd></button>
+  <button class="tool" id="t-paint" aria-pressed="false" title="Рисовать по текстуре (P): включите вид «Текстура» или «UV»" onclick="setTool('paint')"><svg viewBox="0 0 24 24"><path d="M3 21c3 0 5-1 5-3l-2-2c-2 0-3 2-3 5zM8 16l10-10a2 2 0 0 1 3 3L11 19z"/></svg>Рисовать<kbd>P</kbd></button>
   <button class="tool" id="t-orbit" aria-pressed="false" title="Вращать вид без выделения (R)" onclick="setTool('orbit')"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg>Вид<kbd>R</kbd></button>
  </nav>
  <section class="view" aria-label="3D-вид">
-  <canvas id="cv"></canvas><div id="rb"></div>
+  <canvas id="cv"></canvas><canvas id="uvc"></canvas><div id="rb"></div>
   <div class="chip" id="info">Выделено: <b>0</b></div>
   <div class="empty" id="empty"><b>Выберите место на модели</b><br><span style="opacity:.85">Проведите кистью по лицу или выберите часть справа. Вне выделения модель не меняется.</span></div>
   <div class="hints" id="hints"></div>
@@ -102,22 +110,41 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
   <details class="sec" open><summary>1. Область</summary><div class="bd">
    <div class="seg" role="group" aria-label="Режим выделения"><button id="m-add" aria-pressed="true" onclick="setMode('add')">Добавить</button><button id="m-sub" aria-pressed="false" onclick="setMode('sub')">Вычесть</button></div>
    <div class="fld" id="f-size"><div class="lb"><span>Размер кисти</span><b id="vr">0.5</b></div><input id="rs" type="range" min="0.1" max="2" step="0.05" value="0.5" oninput="vr.textContent=this.value" aria-label="Размер кисти"></div>
+   <label class="btn" style="justify-content:flex-start" title="Кисть красит и зеркальное место"><input type="checkbox" id="sym"> Симметрия по X</label>
    <div class="grid2"><button class="btn" onclick="act('grow')" title="Расширить на 2 шага по сетке">Расширить</button><button class="btn" onclick="act('shrink')">Сузить</button><button class="btn" onclick="act('invert')">Инвертировать</button><button class="btn" onclick="act('clear')" title="Esc">Снять</button><button class="btn" id="bus" onclick="undoSel(false)" title="Z">↶ Шаг назад</button><button class="btn" id="brs" onclick="undoSel(true)" title="Shift+Z">↷ Шаг вперёд</button></div>
    <select id="rg" onchange="byRegion()" aria-label="Выбрать часть"><option value="">Выбрать часть модели…</option></select>
    <div class="fld"><div class="lb"><span>Сохранить область под именем</span></div><div class="grid2" style="grid-template-columns:1fr auto"><input id="nm" type="text" placeholder="например, левый глаз"><button class="btn" onclick="saveSel()">Сохранить</button></div></div>
    <div id="saved"></div>
   </div></details>
   <details class="sec" open><summary>2. Правка</summary><div class="bd">
-   <div class="seg" role="group" aria-label="Что сделать"><button id="o-smooth" aria-pressed="true" onclick="setOp('smooth')">Сгладить</button><button id="o-displace" aria-pressed="false" onclick="setOp('displace')">Сместить</button></div>
-   <div class="fld" id="f-it"><div class="lb"><span>Сколько раз сгладить</span><b id="vi">5</b></div><input id="it" type="range" min="1" max="30" value="5" oninput="vi.textContent=this.value;window.LAM=0;window.AG=false" aria-label="Итераций сглаживания"></div>
-   <div class="fld" id="f-dz" hidden><div class="lb"><span>Сдвиг вперёд/назад</span><b id="vz">0.1</b></div><input id="dz" type="range" min="-0.5" max="0.5" step="0.01" value="0.1" oninput="vz.textContent=this.value" aria-label="Смещение по Z"></div>
+   <div class="opg" id="opg" role="group" aria-label="Что сделать"></div>
+   <div id="pf" class="bd" style="padding:0"></div>
    <div class="fld"><div class="lb"><span>Мягкость края</span><b id="vf">0.2</b></div><input id="ft" type="range" min="0" max="1" step="0.05" value="0.2" oninput="vf.textContent=this.value" aria-label="Растушёвка края"></div>
    <button class="btn primary wide" id="ba" onclick="apply()">Применить в области</button>
    <div class="help" id="why">Сначала выделите место на модели.</div>
    <button class="btn wide" id="bsg" onclick="suggest()">Посоветовать параметры</button>
    <div id="sg"></div>
   </div></details>
-  <details class="sec"><summary>3. Заменить голову</summary><div class="bd">
+  <details class="sec" id="s-tex"><summary>3. Текстура</summary><div class="bd">
+   <div class="help" id="th">Рисуйте по модели (вид «Текстура») или прямо по развёртке (вид «UV»). Оригинал не перезаписывается.</div>
+   <div class="opg" id="tmg" role="group" aria-label="Режим кисти текстуры"></div>
+   <div class="fld" id="f-tc"><div class="lb"><span>Цвет</span></div><input id="tc" type="color" value="#c83c3c" aria-label="Цвет кисти"></div>
+   <div class="fld"><div class="lb"><span>Размер кисти (пиксели)</span><b id="vtr">20</b></div><input id="tr" type="range" min="3" max="80" value="20" oninput="vtr.textContent=this.value" aria-label="Размер кисти текстуры"></div>
+   <div class="fld"><div class="lb"><span>Сила</span><b id="vts">0.6</b></div><input id="ts" type="range" min="0.05" max="1" step="0.05" value="0.6" oninput="vts.textContent=this.value" aria-label="Сила кисти текстуры"></div>
+   <div class="grid2"><button class="btn" id="btu" onclick="texHist('undo')" title="Z в виде «Текстура»/«UV»">↶ Отменить</button><button class="btn" id="btr" onclick="texHist('redo')">↷ Вернуть</button></div>
+   <button class="btn wide" id="bte" onclick="texExport()">Сохранить в work/head_edit.*</button>
+  </div></details>
+  <details class="sec" id="s-uv"><summary>4. UV (развёртка)</summary><div class="bd">
+   <div class="help" id="uh">Двигает, растягивает или поворачивает развёртку выделенного места (выделите на модели кистью). Остальное не меняется.</div>
+   <div class="fld"><div class="lb"><span>Сдвиг по U (вправо)</span><b id="vdu">0</b></div><input id="du" type="range" min="-0.1" max="0.1" step="0.005" value="0" oninput="vdu.textContent=this.value" aria-label="Сдвиг U"></div>
+   <div class="fld"><div class="lb"><span>Сдвиг по V (вверх)</span><b id="vdv">0</b></div><input id="dv" type="range" min="-0.1" max="0.1" step="0.005" value="0" oninput="vdv.textContent=this.value" aria-label="Сдвиг V"></div>
+   <button class="btn wide" id="bum" onclick="uvX('move')">Сдвинуть развёртку</button>
+   <div class="grid2"><div class="fld"><div class="lb"><span>Ширина ×</span><b id="vsu">1.2</b></div><input id="su" type="range" min="0.5" max="2" step="0.05" value="1.2" oninput="vsu.textContent=this.value" aria-label="Растяжение по U"></div><div class="fld"><div class="lb"><span>Высота ×</span><b id="vsv">1.2</b></div><input id="sv" type="range" min="0.5" max="2" step="0.05" value="1.2" oninput="vsv.textContent=this.value" aria-label="Растяжение по V"></div></div>
+   <button class="btn wide" id="bus2" onclick="uvX('scale')">Растянуть развёртку</button>
+   <div class="fld"><div class="lb"><span>Угол</span><b id="van">15°</b></div><input id="an" type="range" min="-90" max="90" step="5" value="15" oninput="van.textContent=this.value+'°'" aria-label="Угол поворота"></div>
+   <button class="btn wide" id="bur" onclick="uvX('rotate')">Повернуть развёртку</button>
+  </div></details>
+  <details class="sec"><summary>5. Заменить голову</summary><div class="bd">
    <div class="help">Голова донора встаёт на розетку «шея» манекена.</div>
    <div class="fld"><div class="lb"><span>Донор</span></div><select id="dn" aria-label="Донор"></select></div>
    <div class="fld"><div class="lb"><span>Масштаб</span></div><select id="sc" aria-label="Масштаб"><option value="match_ring">по кольцу шеи</option><option value="keep">не менять</option></select></div>
@@ -136,7 +163,8 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 <script>
 window.addEventListener('error',e=>{console.log(e.filename,e.lineno,e.colno,e.error&&e.error.stack);fetch('/api/edit/state?err='+encodeURIComponent(e.message+' @'+e.filename+':'+e.lineno+':'+e.colno+' '+(e.error&&e.error.stack)));const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка скрипта: '+e.message;t.append(d)}});
 window.addEventListener('unhandledrejection',e=>{const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка: '+(e.reason&&e.reason.message||e.reason);t.append(d)}});
-const $=id=>document.getElementById(id);let selHist=[],selRedo=[],curIds=[],tool='brush',NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null,nsel=0,nops=0;
+const $=id=>document.getElementById(id);let view='mesh',HF=[],tmesh=null,ttex=null,tg=null,cornerV=null,UVD=null,TI={available:true,can_undo:false,can_redo:false},tmode='paint',stroke=[],uvv={sz:1,ox:0,oy:0,fit:true},gr=null,TX=document.createElement('canvas');
+let selHist=[],selRedo=[],curIds=[],tool='brush',NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null,nsel=0,nops=0;
 const post=(p,d)=>fetch('/api/edit/'+p,{method:'POST',body:JSON.stringify(d||{})}).then(r=>r.json());
 function toast(t,k){const e=document.createElement('div');e.className='toast '+(k||'');e.textContent=t;$('toasts').append(e);setTimeout(()=>e.remove(),k=='err'?7000:3500)}
 const setSt=t=>$('st').textContent=t;
@@ -151,41 +179,54 @@ function frame(headOnly){const p=geo.attributes.position.array,n=headOnly?NH:p.l
  const c=new THREE.Vector3((mn[0]+mx[0])/2,(mn[1]+mx[1])/2,(mn[2]+mx[2])/2),r=Math.hypot(mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2])/2;
  ctl.target.copy(c);C.position.set(c.x,c.y,c.z+r*2.6);C.near=r/50;C.far=r*60;C.updateProjectionMatrix();window.RAD=r;ctl.update()}
 /* инструменты и режимы */
-function hints(){const t={brush:'<span><kbd>ЛКМ</kbd> красить</span><span><kbd>ПКМ</kbd> вращать</span><span><kbd>колесо</kbd> масштаб</span>',box:'<span><kbd>ЛКМ</kbd> обвести рамкой</span><span><kbd>ПКМ</kbd> вращать</span><span><kbd>колесо</kbd> масштаб</span>',orbit:'<span><kbd>ЛКМ</kbd> вращать</span><span><kbd>ПКМ</kbd> сдвинуть</span><span><kbd>колесо</kbd> масштаб</span>'}[tool];
+function hints(){const nav='<span><kbd>ПКМ</kbd> вращать</span><span><kbd>колесо</kbd> масштаб</span>';
+ const t={brush:'<span><kbd>ЛКМ</kbd> красить область</span>'+nav,box:'<span><kbd>ЛКМ</kbd> обвести рамкой</span>'+nav,grab:'<span><kbd>ЛКМ</kbd> потянуть выделенное</span>'+nav,paint:view=='uv'?'<span><kbd>ЛКМ</kbd> рисовать по развёртке</span><span><kbd>ПКМ</kbd> двигать</span><span><kbd>колесо</kbd> масштаб</span>':'<span><kbd>ЛКМ</kbd> рисовать по модели</span>'+nav,orbit:view=='uv'?'<span><kbd>ЛКМ</kbd> двигать развёртку</span><span><kbd>колесо</kbd> масштаб</span>':'<span><kbd>ЛКМ</kbd> вращать</span><span><kbd>ПКМ</kbd> сдвинуть</span><span><kbd>колесо</kbd> масштаб</span>'}[tool];
  $('hints').innerHTML=t+'<span><kbd>Z</kbd> шаг назад</span><span><kbd>Esc</kbd> снять выделение</span>';$('f-size').hidden=tool!='brush'}
-function setTool(t){tool=t;sel=t!='orbit';for(const k of['brush','box','orbit'])$('t-'+k).setAttribute('aria-pressed',k==t);mb();hints();cv.style.cursor=sel?'crosshair':'grab'}
+function setTool(t){if(t=='paint'&&view=='mesh'){setView('tex');return}if(view=='uv'&&!['paint','orbit'].includes(t)){toast('В виде «UV» доступны «Рисовать» и «Вид». Выделять — в виде «Сетка» или «Текстура»');return}
+ tool=t;sel=t!='orbit';for(const k of['brush','box','grab','paint','orbit'])$('t-'+k).setAttribute('aria-pressed',k==t);mb();hints();cv.style.cursor=sel?'crosshair':'grab';$('uvc').style.cursor=t=='paint'?'crosshair':'grab'}
 function setMode(m){mode=m;$('m-add').setAttribute('aria-pressed',m=='add');$('m-sub').setAttribute('aria-pressed',m=='sub')}
-function setOp(o){$('o-smooth').setAttribute('aria-pressed',o=='smooth');$('o-displace').setAttribute('aria-pressed',o=='displace');$('f-it').hidden=o!='smooth';$('f-dz').hidden=o!='displace';window.OP=o}
-window.OP='smooth';
+/* правки сетки: таблица операций (подпись, ползунки), ползунки строятся один раз */
+const OPS={smooth:['Сгладить',['it']],displace:['Сместить',['dx','dy','dz']],inflate:['Надуть',['am']],flatten:['Выровнять',['str']],pinch:['Сжать',['str']],scale:['Растянуть',['sx','sy','sz']]};
+const FLD={it:['Сколько раз сгладить',1,30,1,5],dx:['Сдвиг вправо',-.5,.5,.01,0],dy:['Сдвиг вверх',-.5,.5,.01,0],dz:['Сдвиг вперёд',-.5,.5,.01,.1],am:['Надуть (+) / втянуть (−)',-.3,.3,.01,.05],str:['Сила',0,1,.05,.5],sx:['Ширина ×',.5,2,.05,1.2],sy:['Высота ×',.5,2,.05,1.2],sz:['Глубина ×',.5,2,.05,1.2]};
+const PAR={smooth:()=>({iterations:+$('it').value,...(window.LAM?{lam:window.LAM}:{})}),displace:()=>({vector:[+$('dx').value,+$('dy').value,+$('dz').value]}),inflate:()=>({amount:+$('am').value}),flatten:()=>({strength:+$('str').value}),pinch:()=>({strength:+$('str').value}),scale:()=>({factor:[+$('sx').value,+$('sy').value,+$('sz').value]})};
+$('opg').innerHTML=Object.entries(OPS).map(([k,v])=>'<button id="o-'+k+'" aria-pressed="false" onclick="setOp(\''+k+'\')">'+v[0]+'</button>').join('');
+$('pf').innerHTML=Object.entries(FLD).map(([k,f])=>'<div class="fld" id="f-'+k+'" hidden><div class="lb"><span>'+f[0]+'</span><b id="v'+k+'">'+f[4]+'</b></div><input id="'+k+'" type="range" min="'+f[1]+'" max="'+f[2]+'" step="'+f[3]+'" value="'+f[4]+'" aria-label="'+f[0]+'" oninput="$(\'v'+k+'\').textContent=this.value'+(k=='it'?';window.LAM=0;window.AG=false':'')+'"></div>').join('');
+function setOp(o){window.OP=o;for(const k in OPS){$('o-'+k).setAttribute('aria-pressed',k==o)}for(const k in FLD)$('f-'+k).hidden=!OPS[o][1].includes(k)}
+setOp('smooth');
+const TM={paint:'Краска',erase:'Стёрка',blur:'Размыть',lighten:'Светлее',darken:'Темнее'};
+$('tmg').innerHTML=Object.entries(TM).map(([k,v])=>'<button id="tm-'+k+'" aria-pressed="'+(k=='paint')+'" onclick="setTM(\''+k+'\')">'+v+'</button>').join('');
+function setTM(m){tmode=m;for(const k in TM)$('tm-'+k).setAttribute('aria-pressed',k==m);$('f-tc').hidden=m!='paint'}
 function sync(){$('info').innerHTML='Выделено: <b>'+nsel+'</b> вершин';$('empty').hidden=nsel>0&&!window.NOGL;$('ba').disabled=!nsel;
- $('why').textContent=nsel?'Изменится только выделенное место и мягкая кромка вокруг.':'Сначала выделите место на модели.';$('bsg').disabled=!nsel;$('bu').disabled=!nops;$('bus').disabled=!selHist.length;$('brs').disabled=!selRedo.length}
+ $('why').textContent=nsel?'Изменится только выделенное место и мягкая кромка вокруг.':'Сначала выделите место на модели.';$('bsg').disabled=!nsel;$('bu').disabled=!nops;$('bus').disabled=!selHist.length;$('brs').disabled=!selRedo.length;
+ $('btu').disabled=!TI.can_undo;$('btr').disabled=!TI.can_redo;for(const b of['bum','bus2','bur'])$(b).disabled=!nsel||!TI.available;$('uh').textContent=!TI.available?'Развёртки нет: после замены головы остаётся только сетка.':(nsel?'Меняется развёртка выделенного места и мягкой кромки вокруг; остальное не двигается.':'Сначала выделите место на модели (кистью или рамкой).');
+ for(const v of['tex','uv']){$('v-'+v).disabled=!TI.available;$('v-'+v).title=TI.available?'':'Текстуры и UV нет после замены головы'}}
 async function load(){const m=await (await fetch('/api/edit/mesh')).json();
  geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);geo.computeVertexNormals();
  col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));paint([]);
  mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.8,side:THREE.DoubleSide}));S.add(mesh);
- geo.computeBoundingSphere();NH=m.nhead;NF=m.nfhead;size();frame(true);
+ geo.computeBoundingSphere();NH=m.nhead;NF=m.nfhead;HF=m.f.slice(0,NF*3);size();frame(true);tinfo();
  const st=await (await fetch('/api/edit/state')).json();st.regions.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;$('rg').append(o)});
  paint(st.draft_vertices);info(st);setTool('brush');setSt('Готово')}
 function paint(ids){for(let i=0;i<col.length;i+=3){const b=i/3>=NH&&NH>0;col[i]=b?.55:.85;col[i+1]=b?.6:.7;col[i+2]=b?.7:.6}
- for(const v of ids){col[v*3]=.15;col[v*3+1]=.55;col[v*3+2]=1}geo.attributes.color.needsUpdate=true;curIds=ids;nsel=ids.length;sync()}
+ for(const v of ids){col[v*3]=.15;col[v*3+1]=.55;col[v*3+2]=1}geo.attributes.color.needsUpdate=true;curIds=ids;nsel=ids.length;tintT();if(view=='uv')drawUV();sync()}
 function res(r){if(r.error){toast(r.error,'err');return}if(r.vertices)paint(r.vertices)}
 function snap(){if(selHist.length&&selHist[selHist.length-1].length==curIds.length&&selHist[selHist.length-1].every((v,i)=>v==curIds[i]))return;selHist.push(curIds.slice());if(selHist.length>50)selHist.shift();selRedo=[];sync()}
 async function undoSel(redo){const from=redo?selRedo:selHist,to=redo?selHist:selRedo;if(!from.length)return false;to.push(curIds.slice());const ids=from.pop();res(await post('select',{action:'set',ids}));toast(redo?'Выделение возвращено':'Выделение отменено');return true}
-async function undoAny(redo){if(await undoSel(redo))return;hist(redo?'redo':'undo')}
+async function undoAny(redo){if(view!='mesh'&&(redo?TI.can_redo:TI.can_undo)){texHist(redo?'redo':'undo');return}if(await undoSel(redo))return;hist(redo?'redo':'undo')}
 const act=a=>{snap();return post('select',{action:a,steps:2}).then(r=>{res(r);if(a=='clear'&&!r.error)toast('Выделение снято (Z — вернуть)')})};
 const byRegion=()=>{const v=$('rg').value;if(v){snap();post('select',{action:'region',name:v,mode}).then(res)}};
 const mb=()=>{ctl.mouseButtons.LEFT=sel?-1:THREE.MOUSE.ROTATE;ctl.mouseButtons.RIGHT=sel?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN};
 addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.altKey)return;const k=e.code;/* физические клавиши: работают и в русской раскладке */
- if(k=='KeyB')setTool('brush');else if(k=='KeyX')setTool('box');else if(k=='KeyR')setTool('orbit');else if(k=='KeyZ'){e.preventDefault();undoAny(e.shiftKey)}else if(k=='KeyY'){e.preventDefault();undoAny(true)}else if(k=='Escape')act('clear')});
+ if(k=='KeyB')setTool('brush');else if(k=='KeyX')setTool('box');else if(k=='KeyR')setTool('orbit');else if(k=='KeyG')setTool('grab');else if(k=='KeyP')setTool('paint');else if(k=='KeyZ'){e.preventDefault();undoAny(e.shiftKey)}else if(k=='KeyY'){e.preventDefault();undoAny(true)}else if(k=='Escape')act('clear')});
 let down=false;const ray=new THREE.Raycaster(),mv=new THREE.Vector2();
 function hit(e){const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,C);const h=ray.intersectObject(mesh)[0];
- if(!h||h.faceIndex>=NF)return;pending={action:'brush',point:[h.point.x,h.point.y,h.point.z],radius:+$('rs').value*(window.RAD||1)*0.2,mode};flush()}
+ if(!h||h.faceIndex>=NF)return;pending={action:'brush',point:[h.point.x,h.point.y,h.point.z],radius:+$('rs').value*(window.RAD||1)*0.2,mode,sym:$('sym').checked};flush()}
 async function flush(){if(busy||!pending)return;busy=true;const d=pending;pending=null;res(await post('select',d));busy=false;flush()}
 let p0=null;
-cv.addEventListener('pointerdown',e=>{if(sel&&e.button==0){snap();down=true;cv.setPointerCapture(e.pointerId);if(tool=='box'){const r=cv.getBoundingClientRect();p0=[e.clientX-r.left,e.clientY-r.top]}else hit(e)}});
-cv.addEventListener('pointermove',e=>{if(!down)return;if(tool=='box'&&p0){const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,b=$('rb');
+cv.addEventListener('pointerdown',e=>{if(e.button!=0||!sel)return;if(tool=='paint'){down=true;cv.setPointerCapture(e.pointerId);stroke=[];dab3(e);return}if(tool=='grab'){grabStart(e);return}if(sel&&e.button==0){snap();down=true;cv.setPointerCapture(e.pointerId);if(tool=='box'){const r=cv.getBoundingClientRect();p0=[e.clientX-r.left,e.clientY-r.top]}else hit(e)}});
+cv.addEventListener('pointermove',e=>{if(!down)return;if(tool=='paint'){dab3(e);return}if(tool=='grab'){grabMove(e);return}if(tool=='box'&&p0){const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,b=$('rb');
  b.style.display='block';b.style.left=Math.min(x,p0[0])+'px';b.style.top=Math.min(y,p0[1])+'px';b.style.width=Math.abs(x-p0[0])+'px';b.style.height=Math.abs(y-p0[1])+'px'}else hit(e)});
-cv.addEventListener('pointerup',e=>{if(down&&tool=='box'&&p0){const r=cv.getBoundingClientRect();boxSel(p0[0],p0[1],e.clientX-r.left,e.clientY-r.top);$('rb').style.display='none';p0=null}down=false});
+cv.addEventListener('pointerup',e=>{if(down&&tool=='paint'){down=false;strokeEnd();return}if(down&&tool=='grab'){down=false;grabEnd();return}if(down&&tool=='box'&&p0){const r=cv.getBoundingClientRect();boxSel(p0[0],p0[1],e.clientX-r.left,e.clientY-r.top);$('rb').style.display='none';p0=null}down=false});
 function boxSel(x0,y0,x1,y1){const P=geo.attributes.position.array,N=geo.attributes.normal.array,w=cv.clientWidth,h=cv.clientHeight,v=new THREE.Vector3(),ids=[];
  const lx=Math.min(x0,x1),hx=Math.max(x0,x1),ly=Math.min(y0,y1),hy=Math.max(y0,y1),cam=C.position;
  mesh.updateMatrixWorld();for(let i=0;i<NH;i++){v.set(P[i*3],P[i*3+1],P[i*3+2]);const nx=N[i*3]*(cam.x-v.x)+N[i*3+1]*(cam.y-v.y)+N[i*3+2]*(cam.z-v.z);if(nx<=0)continue;
@@ -193,22 +234,22 @@ function boxSel(x0,y0,x1,y1){const P=geo.attributes.position.array,N=geo.attribu
  post('select',{action:'ids',ids,mode}).then(res)}
 const feather=()=>+$('ft').value*(window.RAD||1)*0.2;
 async function saveSel(){if(!nsel){toast('Сначала выделите место','err');return}const r=await post('save',{name:$('nm').value,feather:feather()});if(r.error){toast(r.error,'err');return}$('nm').value='';toast('Область сохранена','ok');refresh()}
-async function apply(){const op=window.OP,params=op=='smooth'?{iterations:+$('it').value,...(window.LAM?{lam:window.LAM}:{})}:{vector:[0,0,+$('dz').value]};
+async function apply(){const op=window.OP,params=PAR[op]();
  setSt('Применяю…');$('ba').disabled=true;
  const r=await post('apply',{op,selection:'draft',params,by:window.AG?'agent':'user',feather:feather()});window.AG=false;window.LAM=0;
  if(r.error){toast(r.error,'err');setSt('Ошибка');sync();return}await reloadMesh();refresh();toast('Правка применена. «Отменить» (Z) вернёт как было','ok');setSt('Готово')}
 async function suggest(){const r=await post('suggest',{selection:'draft',feather:feather()});if(r.error){toast(r.error,'err');return}
  $('sg').innerHTML='<div class="box"><b>Совет помощника</b> <span class="mut">— только предлагает, применяете вы</span>'+r.proposals.map((p,i)=>'<div class="saved"><span class="n">'+(i+1)+'. сгладить ×'+p.params.iterations+', сила '+p.params.lam+'<br><span class="help">'+p.why+'</span></span><button class="btn" onclick="takeSug('+p.params.iterations+','+p.params.lam+')">Взять</button></div>').join('')+'</div>'}
-function takeSug(it,lam){setOp('smooth');$('it').value=it;$('vi').textContent=it;window.LAM=lam;window.AG=true;toast('Параметры подставлены — нажмите «Применить»')}
+function takeSug(it,lam){setOp('smooth');$('it').value=it;$('vit').textContent=it;window.LAM=lam;window.AG=true;toast('Параметры подставлены — нажмите «Применить»')}
 let showB=false;
-async function toggleBefore(){if(showB){await reloadMesh(false);return}
+async function toggleBefore(){if(view!='mesh'){toast('«До» показывается в виде «Сетка»');return}if(showB){await reloadMesh(false);return}
  const r=await (await fetch('/api/edit/before')).json();if(r.none){toast('Пока нечего сравнивать: правок нет');return}
  await reloadMesh(false,'/api/edit/before');showB=true;$('bb').classList.add('on');$('bb').textContent='Вернуть «после»';
  $('info').innerHTML='<b>«ДО»</b> последней правки ('+r.op+')'+(r.max_move!=null?', сдвиг до '+r.max_move.toFixed(3):', форма сетки изменилась');$('empty').hidden=true}
 async function hist(a){const r=await post(a);await reloadMesh(true);refresh();toast(r&&r.error?r.error:(a=='undo'?'Отменено':'Возвращено'),r&&r.error?'err':'')}
-async function reloadMesh(fit,url){showB=false;$('bb').classList.remove('on');$('bb').textContent='Показать «до»';const m=await (await fetch(url||'/api/edit/mesh')).json();NH=m.nhead;NF=m.nfhead;
+async function reloadMesh(fit,url){showB=false;$('bb').classList.remove('on');$('bb').textContent='Показать «до»';const m=await (await fetch(url||'/api/edit/mesh')).json();NH=m.nhead;NF=m.nfhead;if(!url)HF=m.f.slice(0,NF*3);
  S.remove(mesh);geo.dispose();geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));mesh.geometry=geo;S.add(mesh);
- geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true)}
+ geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true);if(!url){await tinfo();if(view!='mesh'&&!TI.available)await setView('mesh');else await refreshView()}}
 let JOB=null;
 async function rep(){const r=await post('replace_job',{donor:$('dn').value,scale:$('sc').value});if(r.error){toast(r.error,'err');return}
  JOB=r.job;$('prog').hidden=false;$('pc').hidden=false;$('rrep').hidden=true;$('brp').disabled=true;setSt('Заменяю голову…');
@@ -230,6 +271,66 @@ function info(st){if(!$('dn').options.length)Object.entries(st.donors).forEach((
  $('saved').innerHTML=st.selections.map(s=>'<div class="saved"><span class="n"><b>'+esc(s.name)+'</b> <span class="mut">'+s.count+' вершин</span></span><button class="btn" onclick="loadSel(\''+s.id+'\')">Выбрать</button><button class="btn" aria-label="Удалить область" onclick="delSel(\''+s.id+'\')">✕</button></div>').join('')}
 async function loadSel(id){snap();res(await post('select',{action:'load',id}))}
 async function delSel(id){await post('delete',{id});refresh()}
+/* текстура и UV */
+async function tinfo(){const r=await (await fetch('/api/edit/tex_info')).json();if(!r.error)TI=r;sync()}
+function loadTexImg(){return new Promise(res=>{const im=new Image();im.onload=()=>{TX.width=im.width;TX.height=im.height;TX.getContext('2d').drawImage(im,0,0);if(ttex)ttex.needsUpdate=true;drawUV();res()};im.onerror=()=>res();im.src='/api/edit/texture.png?r='+Date.now()})}
+async function buildTex(){const u=await (await fetch('/api/edit/mesh_uv')).json();if(u.error){toast(u.error,'err');return false}
+ if(TX.width<512)await loadTexImg();
+ const P=geo.attributes.position.array,n=NF*3,pos=new Float32Array(n*3);cornerV=new Uint32Array(n);
+ for(let i=0;i<n;i++){const v=HF[i];cornerV[i]=v;pos[i*3]=P[v*3];pos[i*3+1]=P[v*3+1];pos[i*3+2]=P[v*3+2]}
+ if(tmesh){S.remove(tmesh);tg.dispose()}
+ tg=new THREE.BufferGeometry();tg.setAttribute('position',new THREE.BufferAttribute(pos,3));tg.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(u.uv),2));tg.setAttribute('color',new THREE.BufferAttribute(new Float32Array(n*3).fill(1),3));tg.computeVertexNormals();
+ if(!ttex)ttex=new THREE.CanvasTexture(TX);
+ if(!tmesh)tmesh=new THREE.Mesh(tg,new THREE.MeshStandardMaterial({map:ttex,vertexColors:true,roughness:.9,side:THREE.DoubleSide}));else tmesh.geometry=tg;
+ S.add(tmesh);tmesh.visible=view=='tex';tintT();return true}
+function tintT(){if(!tg)return;const c=tg.attributes.color.array,m=new Uint8Array(NH);for(const v of curIds)m[v]=1;for(let i=0;i<cornerV.length;i++){const k=m[cornerV[i]];c[i*3]=k?.55:1;c[i*3+1]=k?.8:1;c[i*3+2]=1}tg.attributes.color.needsUpdate=true}
+async function loadUV(){const r=await (await fetch('/api/edit/uv_layout')).json();if(r.error){toast(r.error,'err');return false}UVD=r;return true}
+async function refreshView(){if(view=='tex')await buildTex();else if(view=='uv'){await loadUV();drawUV()}}
+async function setView(v){if(v!='mesh'&&!TI.available){toast('Текстуры и UV есть только у шаблона головы','err');return}
+ if(v!='mesh'){if(TX.width<512)await loadTexImg();if(v=='uv'&&!await loadUV())return;if(v=='tex'&&!await buildTex())return}
+ view=v;for(const k of['mesh','tex','uv'])$('v-'+k).setAttribute('aria-pressed',k==v);
+ mesh.visible=v=='mesh';if(tmesh)tmesh.visible=v=='tex';cv.style.display=v=='uv'?'none':'block';$('uvc').style.display=v=='uv'?'block':'none';
+ if(v!='mesh')$('s-tex').open=true;if(v=='uv')$('s-uv').open=true;
+ if(v=='uv'&&!['paint','orbit'].includes(tool))tool='paint';if(v=='mesh'&&tool=='paint')tool='brush';
+ if(v=='uv'){uvv.fit=true;uvSize()}setTool(tool);$('empty').hidden=v!='mesh'||nsel>0;drawUV()}
+function hexRGB(h){return[1,3,5].map(i=>parseInt(h.substr(i,2),16))}
+function addPt(u,v){if(u<0||u>1||v<0||v>1)return;const r=+$('tr').value/(TX.width||1024),l=stroke[stroke.length-1];if(l&&Math.hypot(l[0]-u,l[1]-v)<r*.25)return;stroke.push([u,v]);previewDab(u,v)}
+function previewDab(u,v){if(tmode!='paint')return;const g=TX.getContext('2d'),r=+$('tr').value,x=u*TX.width,y=(1-v)*TX.height,a=+$('ts').value,c=hexRGB($('tc').value),gd=g.createRadialGradient(x,y,0,x,y,r);
+ gd.addColorStop(0,'rgba('+c+','+a+')');gd.addColorStop(.5,'rgba('+c+','+a+')');gd.addColorStop(1,'rgba('+c+',0)');g.fillStyle=gd;g.fillRect(x-r,y-r,2*r,2*r);if(ttex)ttex.needsUpdate=true;drawUV()}
+function dab3(e){if(!tmesh||view!='tex')return;const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,C);const h=ray.intersectObject(tmesh)[0];if(h&&h.uv)addPt(h.uv.x,h.uv.y)}
+async function strokeEnd(){const pts=stroke;stroke=[];if(!pts.length)return;
+ const r=await post('tex_paint',{points:pts,radius:+$('tr').value/(TX.width||1024),strength:+$('ts').value,mode:tmode,color:hexRGB($('tc').value)});
+ if(r.error)toast(r.error,'err');else TI=Object.assign(TI,r);await loadTexImg();sync()}
+async function texHist(a){const r=await post('tex_history',{action:a});if(r.error){toast(r.error,'err');return}if(!r.ok){toast('Больше нечего '+(a=='undo'?'отменять':'возвращать'));return}
+ TI=Object.assign(TI,r);await loadTexImg();if(r.kind=='uv')await refreshView();sync();toast(a=='undo'?'Правка текстуры/UV отменена':'Правка текстуры/UV возвращена')}
+async function uvX(op){const r=await post('uv_xform',{op,du:+$('du').value,dv:+$('dv').value,factor:[+$('su').value,+$('sv').value],angle:+$('an').value,feather:feather()});
+ if(r.error){toast(r.error,'err');return}TI=Object.assign(TI,r);await refreshView();sync();toast('Развёртка изменена. Z — отменить','ok')}
+async function texExport(){const r=await post('tex_export',{});if(r.error){toast(r.error,'err');return}toast('Сохранено: '+r.files.join(', '),'ok')}
+/* перетаскивание выделенного (Grab) */
+function planePt(e){const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,C);const n=new THREE.Vector3();C.getWorldDirection(n);return ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(n,gr.c),new THREE.Vector3())}
+function grabStart(e){if(!nsel){toast('Сначала выделите место: кистью или рамкой','err');return}down=true;cv.setPointerCapture(e.pointerId);const P=geo.attributes.position.array,c=new THREE.Vector3();
+ for(const v of curIds){c.x+=P[v*3];c.y+=P[v*3+1];c.z+=P[v*3+2]}c.divideScalar(curIds.length);gr={c,P0:P.slice(),d:new THREE.Vector3()};gr.p=planePt(e)}
+function grabMove(e){if(!gr||!gr.p)return;const p=planePt(e);if(!p)return;gr.d.copy(p).sub(gr.p);const P=geo.attributes.position.array;
+ for(const v of curIds){P[v*3]=gr.P0[v*3]+gr.d.x;P[v*3+1]=gr.P0[v*3+1]+gr.d.y;P[v*3+2]=gr.P0[v*3+2]+gr.d.z}geo.attributes.position.needsUpdate=true}
+async function grabEnd(){if(!gr)return;const d=gr.d.clone();gr=null;if(d.length()<1e-4){await reloadMesh();return}
+ const r=await post('apply',{op:'displace',selection:'draft',params:{vector:[d.x,d.y,d.z]},by:'user',feather:feather()});if(r.error){toast(r.error,'err');await reloadMesh();return}
+ await reloadMesh();refresh();toast('Сдвинуто. Z — отменить','ok')}
+/* вид «UV»: двумерный холст с текстурой и сеткой развёртки */
+function uvSize(){const c=$('uvc'),w=c.clientWidth,h=c.clientHeight;if(!w||!h)return;if(c.width!=w)c.width=w;if(c.height!=h)c.height=h;if(uvv.fit){const b=Math.min(w,h)-40;uvv.sz=b;uvv.ox=(w-b)/2;uvv.oy=(h-b)/2;uvv.fit=false}}
+let uvQ=false;
+function drawUV(){if(view!='uv'||uvQ)return;uvQ=true;requestAnimationFrame(()=>{uvQ=false;if(view!='uv'||!UVD)return;uvSize();const c=$('uvc'),g=c.getContext('2d'),{sz,ox,oy}=uvv;g.fillStyle='#1a1e27';g.fillRect(0,0,c.width,c.height);
+ if(TX.width>1)g.drawImage(TX,ox,oy,sz,sz);g.strokeStyle='#fff';g.strokeRect(ox,oy,sz,sz);
+ const vt=UVD.vt,T=UVD.f,X=i=>vt[i*2]*sz+ox,Y=i=>(1-vt[i*2+1])*sz+oy,m=new Uint8Array(NH);for(const v of curIds)m[v]=1;
+ g.lineWidth=.5;g.strokeStyle='rgba(255,255,255,.35)';g.beginPath();for(let f=0;f<T.length;f+=3){const a=T[f],b=T[f+1],d=T[f+2];g.moveTo(X(a),Y(a));g.lineTo(X(b),Y(b));g.lineTo(X(d),Y(d));g.lineTo(X(a),Y(a))}g.stroke();
+ g.lineWidth=1;g.strokeStyle='#4aa3ff';g.fillStyle='rgba(74,163,255,.25)';g.beginPath();for(let f=0;f<HF.length;f+=3){if(m[HF[f]]&&m[HF[f+1]]&&m[HF[f+2]]){const a=T[f],b=T[f+1],d=T[f+2];g.moveTo(X(a),Y(a));g.lineTo(X(b),Y(b));g.lineTo(X(d),Y(d));g.closePath()}}g.fill();g.stroke()})}
+const uvPt=e=>{const r=$('uvc').getBoundingClientRect();return[(e.clientX-r.left-uvv.ox)/uvv.sz,1-(e.clientY-r.top-uvv.oy)/uvv.sz]};
+let uvDrag=null;
+$('uvc').addEventListener('contextmenu',e=>e.preventDefault());
+$('uvc').addEventListener('pointerdown',e=>{$('uvc').setPointerCapture(e.pointerId);if(e.button==0&&tool=='paint'){uvDrag={paint:1};stroke=[];addPt(...uvPt(e))}else uvDrag={x:e.clientX,y:e.clientY}});
+$('uvc').addEventListener('pointermove',e=>{if(!uvDrag)return;if(uvDrag.paint)addPt(...uvPt(e));else{uvv.ox+=e.clientX-uvDrag.x;uvv.oy+=e.clientY-uvDrag.y;uvDrag.x=e.clientX;uvDrag.y=e.clientY;drawUV()}});
+$('uvc').addEventListener('pointerup',()=>{if(uvDrag&&uvDrag.paint)strokeEnd();uvDrag=null});
+$('uvc').addEventListener('wheel',e=>{e.preventDefault();const r=$('uvc').getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,k=e.deltaY<0?1.15:1/1.15;uvv.ox=mx-(mx-uvv.ox)*k;uvv.oy=my-(my-uvv.oy)*k;uvv.sz*=k;drawUV()},{passive:false});
+new ResizeObserver(()=>{uvv.fit=true;drawUV()}).observe($('uvc'));
 (function loop(){requestAnimationFrame(loop);ctl.update();R.render(S,C)})();
 load();
 </script></body></html>

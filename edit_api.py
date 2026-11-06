@@ -184,6 +184,9 @@ def select(d):
     m = A.parts['head']
     if a == 'brush':
         DRAFT.brush(d['point'], float(d['radius']), add=d.get('mode', 'add') == 'add')
+        if d.get('sym'):    # mirror across the X=0 plane (the template head is symmetric)
+            p = list(d['point'])
+            DRAFT.brush([-p[0], p[1], p[2]], float(d['radius']), add=d.get('mode', 'add') == 'add')
     elif a == 'box':
         DRAFT.box(d['lo'], d['hi'], add=d.get('mode', 'add') == 'add', visible_from=d.get('visible_from'))
     elif a == 'ids':    # vertex ids picked by the client (screen rectangle, front faces only)
@@ -286,3 +289,51 @@ def history(action):
     if (nxt and nxt['op'] == 'replace_part') or len(DRAFT.mask) != len(A.parts['head'].V):
         DRAFT = Selection(A.parts['head'])
     return {'ok': r}
+
+
+# --- texture and UV (texture.py): the head must be the template
+def tex_info():
+    _init()
+    import texture
+    ok = texture.available(A.parts['head'])
+    return dict(texture.status(), available=ok)
+
+
+def tex_paint(d):
+    _init()
+    import texture
+    r = texture.paint(d, A.parts['head'])
+    return dict(r, **texture.status())
+
+
+def uv_xform(d):
+    _init()
+    import texture
+    if not DRAFT.count():
+        raise ValueError('Сначала выделите место на модели')
+    r = texture.uv_xform(d, A.parts['head'], DRAFT.weights(float(d.get('feather', 0))))
+    return dict(r, **texture.status())
+
+
+def tex_history(d):
+    _init()
+    import texture
+    return dict(texture.history(d['action']), **texture.status())
+
+
+def tex_export(d):
+    _init()
+    import texture
+    return texture.export(A.parts['head'])
+
+
+def uv_layout():
+    _init()
+    import texture
+    return texture.uv_layout(A.parts['head'])
+
+
+def mesh_uv():
+    _init()
+    import texture
+    return texture.mesh_uv(A.parts['head'])

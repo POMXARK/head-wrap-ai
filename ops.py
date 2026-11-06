@@ -39,6 +39,52 @@ def displace(V, F, w, p):
     return V + w[:, None] * np.asarray(p['vector'], float)[None, :]
 
 
+def vertex_normals(V, F):
+    fn = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
+    n = np.zeros_like(V)
+    for k in range(3):
+        np.add.at(n, F[:, k], fn)
+    return n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+
+
+def _center(V, w):
+    return (V * w[:, None]).sum(0) / max(w.sum(), 1e-12)
+
+
+@op('inflate')
+def inflate(V, F, w, p):
+    """push the area out (amount > 0) or in (< 0) along the surface normals, like the Inflate brush; amount in mesh units"""
+    return V + (w * float(p.get('amount', 0.05)))[:, None] * vertex_normals(V, F)
+
+
+@op('flatten')
+def flatten(V, F, w, p):
+    """pull the area to its mean plane (strength 0..1), like the Flatten brush"""
+    n = vertex_normals(V, F)
+    c = _center(V, w)
+    nm = (n * w[:, None]).sum(0)
+    nm /= max(np.linalg.norm(nm), 1e-12)
+    d = (V - c) @ nm
+    return V - (w * float(p.get('strength', 0.5)) * d)[:, None] * nm[None, :]
+
+
+@op('pinch')
+def pinch(V, F, w, p):
+    """squeeze the area towards its centre along the surface (strength 0..1), like the Pinch brush"""
+    n = vertex_normals(V, F)
+    d = _center(V, w) - V
+    d -= (d * n).sum(1, keepdims=True) * n
+    return V + (w * float(p.get('strength', 0.3)))[:, None] * d
+
+
+@op('scale')
+def scale(V, F, w, p):
+    """stretch/shrink the area about its centre: params factor [sx,sy,sz] (or one number); the weights blend it in"""
+    f = np.broadcast_to(np.asarray(p.get('factor', 1.2), float), (3,))
+    c = _center(V, w)
+    return c + (V - c) * (1 + w[:, None] * (f[None, :] - 1))
+
+
 def apply(name, V, F, w, params=None):
     if name not in REG:
         raise KeyError('op %s is not implemented (known: %s)' % (name, ', '.join(sorted(REG))))

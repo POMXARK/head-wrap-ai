@@ -204,10 +204,20 @@ class H(BaseHTTPRequestHandler):
                 self.send_error(403)
             else:
                 self.send(open(f, 'rb').read(), 'model/gltf-binary')
-        elif path in ('/api/edit/state', '/api/edit/mesh', '/api/edit/before'):
+        elif path in ('/api/edit/state', '/api/edit/mesh', '/api/edit/before', '/api/edit/tex_info', '/api/edit/uv_layout', '/api/edit/mesh_uv'):
             import edit_api
             with edit_api.LOCK:
-                self.send({'state': edit_api.state, 'mesh': edit_api.mesh, 'before': edit_api.before}[path.rsplit('/', 1)[1]]())
+                try:
+                    self.send({'state': edit_api.state, 'mesh': edit_api.mesh, 'before': edit_api.before, 'tex_info': edit_api.tex_info,
+                               'uv_layout': edit_api.uv_layout, 'mesh_uv': edit_api.mesh_uv}[path.rsplit('/', 1)[1]]())
+                except ValueError as e:
+                    self.send({'error': str(e)})
+        elif path == '/api/edit/texture.png':
+            import edit_api
+            import texture
+            with edit_api.LOCK:
+                b = texture.png()
+            self.send(b, 'image/png')
         elif path == '/api/critic':      # common critic format (C1): ?kind=eye|mesh
             import critics
             try:
@@ -308,7 +318,8 @@ class H(BaseHTTPRequestHandler):
                     r = {'select': edit_api.select, 'save': edit_api.save_selection, 'apply': edit_api.apply, 'replace': edit_api.replace_head,
                          'replace_job': edit_api.replace_job, 'suggest': edit_api.suggest_area, 'cancel': lambda x: __import__('jobs').cancel(x['id']),
                          'delete': lambda x: edit_api.delete_selection(x['id']) or {'ok': True},
-                         'undo': lambda x: edit_api.history('undo'), 'redo': lambda x: edit_api.history('redo')}[k](d)
+                         'tex_paint': edit_api.tex_paint, 'uv_xform': edit_api.uv_xform, 'tex_history': edit_api.tex_history,
+                         'tex_export': edit_api.tex_export, 'undo': lambda x: edit_api.history('undo'), 'redo': lambda x: edit_api.history('redo')}[k](d)
                 self.send(r)
             except Exception as e:
                 self.send({'error': str(e)})
