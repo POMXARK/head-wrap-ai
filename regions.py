@@ -19,7 +19,9 @@ def classify(V, eyes):
     r = np.zeros(len(V), int)
     r[(V[:, 1] > 7.85) | ((V[:, 2] < 0.2) & (V[:, 1] > 7.0))] = 4  # scalp: top, and the back above the ears
     r[(V[:, 1] < 6.15)] = 3  # neck under the chin
-    r[(V[:, 2] > 1.25) & (V[:, 1] > 6.7) & (V[:, 1] < 7.1) & (np.abs(V[:, 0]) < 0.25)] = 6  # nose
+    ax = np.abs(V[:, 0])
+    # nose: only what stands out of the cheek plane (cheek z ~1.45 at |x|~0.25); the threshold falls from the ridge to the wing
+    r[(V[:, 2] > 1.46 + 0.5 * (0.25 - ax)) & (V[:, 1] > 6.7) & (V[:, 1] < 7.1) & (ax < 0.25)] = 6  # nose
     r[(V[:, 2] > 1.0) & (V[:, 1] > 6.35) & (V[:, 1] < 6.7) & (np.abs(V[:, 0]) < 0.6)] = 5  # lips (to be checked)
     r[(np.abs(V[:, 0]) > 0.8) & (V[:, 1] > 6.45) & (V[:, 1] < 7.6) & (V[:, 2] < 0.9)] = 2
     for sgn in (1, -1):
