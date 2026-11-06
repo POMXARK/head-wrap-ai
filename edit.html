@@ -31,7 +31,7 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%}
 <label>Итераций сглаживания: <b id="vi">5</b></label><input id="it" type="range" min="1" max="30" value="5" oninput="vi.textContent=this.value">
 <label>Смещение по Z (для «Сместить»): <b id="vz">0.1</b></label><input id="dz" type="range" min="-0.5" max="0.5" step="0.01" value="0.1" oninput="vz.textContent=this.value">
 <label>Растушёвка края: <b id="vf">0.2</b></label><input id="ft" type="range" min="0" max="1" step="0.05" value="0.2" oninput="vf.textContent=this.value">
-<div class="row"><button class="go" onclick="apply()">Применить в области</button><button onclick="hist('undo')">Отменить</button><button onclick="hist('redo')">Вернуть</button></div>
+<div class="row"><button class="go" onclick="apply()">Применить в области</button><button id="bb" onclick="toggleBefore()">Показать «до»</button><button onclick="hist('undo')">Отменить</button><button onclick="hist('redo')">Вернуть</button></div>
 <hr><b>Заменить голову</b> <span class="m">на манекене; голова встаёт на розетку «шея»</span>
 <div class="row"><select id="dn"></select><select id="sc"><option value="match_ring">масштаб по кольцу</option><option value="keep">не менять масштаб</option></select><button class="go" onclick="rep()">Заменить</button></div>
 <div id="prog" style="display:none"><div style="background:var(--line);border-radius:4px;height:10px"><div id="pb" style="background:var(--acc);height:10px;border-radius:4px;width:0"></div></div>
@@ -86,8 +86,13 @@ function boxSel(x0,y0,x1,y1){const P=geo.attributes.position.array,N=geo.attribu
 async function saveSel(){const r=await post('save',{name:$('nm').value,feather:+$('ft').value*(window.RAD||1)*0.2});refresh()}
 async function apply(){const op=$('op').value,params=op=='smooth'?{iterations:+$('it').value}:{vector:[0,0,+$('dz').value]};
  const r=await post('apply',{op,selection:'draft',params,feather:+$('ft').value*(window.RAD||1)*0.2});if(r.error){alert(r.error);return}await reloadMesh();refresh()}
+let showB=false;
+async function toggleBefore(){if(showB){await reloadMesh(false);return}
+ const r=await (await fetch('/api/edit/before')).json();if(r.none){alert('Пока нечего сравнивать: правок нет');return}
+ await reloadMesh(false,'/api/edit/before');showB=true;$('bb').classList.add('on');$('bb').textContent='«до» (нажмите — вернуть «после»)';
+ $('info').textContent='Показано состояние ДО последней правки ('+r.op+')'+(r.max_move!=null?', наибольший сдвиг вершины '+r.max_move.toFixed(3):', форма сетки изменилась')}
 async function hist(a){await post(a);await reloadMesh(true);refresh()}
-async function reloadMesh(fit){const m=await (await fetch('/api/edit/mesh')).json();NH=m.nhead;NF=m.nfhead;
+async function reloadMesh(fit,url){showB=false;$('bb').classList.remove('on');$('bb').textContent='Показать «до»';const m=await (await fetch(url||'/api/edit/mesh')).json();NH=m.nhead;NF=m.nfhead;
  if(m.v.length!=geo.attributes.position.array.length||true){S.remove(mesh);geo.dispose();geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));mesh.geometry=geo;S.add(mesh)}
  geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true)}
 let JOB=null;

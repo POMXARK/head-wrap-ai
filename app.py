@@ -204,10 +204,10 @@ class H(BaseHTTPRequestHandler):
                 self.send_error(403)
             else:
                 self.send(open(f, 'rb').read(), 'model/gltf-binary')
-        elif path in ('/api/edit/state', '/api/edit/mesh'):
+        elif path in ('/api/edit/state', '/api/edit/mesh', '/api/edit/before'):
             import edit_api
             with edit_api.LOCK:
-                self.send(edit_api.state() if path.endswith('state') else edit_api.mesh())
+                self.send({'state': edit_api.state, 'mesh': edit_api.mesh, 'before': edit_api.before}[path.rsplit('/', 1)[1]]())
         elif path == '/api/edit/job':
             import jobs
             try:

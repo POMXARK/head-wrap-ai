@@ -143,6 +143,21 @@ def mesh():
     return {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(h.V), 'nfhead': len(h.F)}
 
 
+def before():
+    """the model as it was before the last op ('до'), in the format of mesh(); None if there is nothing to compare"""
+    _init()
+    if not A._undo or A._undo[-1][0] != 'head':
+        return {'none': True}
+    V0, F0 = A._undo[-1][1]
+    b = A.parts['body']
+    h = A.parts['head']
+    moved = float(np.linalg.norm(V0 - h.V, axis=1).max()) if len(V0) == len(h.V) else None
+    V = np.vstack([V0, b.V])
+    F = np.vstack([F0, b.F + len(V0)])
+    return {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(V0), 'nfhead': len(F0),
+            'op': A.log[-1]['op'], 'max_move': moved}
+
+
 def select(d):
     """d: {action: brush|box|region|grow|shrink|invert|clear|load, ...}; returns the draft mask as vertex list"""
     global DRAFT
