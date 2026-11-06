@@ -1,0 +1,53 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>head-wrap-ai</title><link rel="stylesheet" href="/ui.css">
+<style>
+.prof{display:grid;grid-template-columns:auto repeat(4,minmax(120px,1fr));gap:var(--s2) var(--s3);align-items:end}
+.prof .use{display:flex;align-items:center;gap:6px;min-height:36px}
+.prof .acts{grid-column:1/-1;display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap}
+.prof.on{border-color:var(--acc);background:linear-gradient(var(--acc-soft),var(--acc-soft)) top/100% 3px no-repeat var(--panel)}
+.cnt{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center}
+@media(max-width:900px){.prof{grid-template-columns:1fr 1fr}}
+</style></head><body>
+<header class="top"><h1>head-wrap-ai</h1><span class="sp"></span><a href="/pipeline">Конвейер</a><a href="/edit">Правка</a><a href="/model">Модель</a><a href="/review">Сравнение</a><a href="/proto">Прототипы</a></header>
+<main class="wrap">
+ <section aria-labelledby="h-go">
+  <h2 id="h-go">Что вы хотите сделать?</h2><p class="lead">Выберите задачу — откроется нужное окно. Не знаете с чего начать — нажмите «? Гайд» вверху.</p>
+ </section>
+ <section class="grid" aria-label="Задачи">
+  <a class="card" href="/pipeline"><h3>Собрать голову героя</h3><span class="help">Собрать, оценить глаза и сетку, сравнить варианты, положить в игру.</span><span class="go">Открыть «Конвейер» →</span></a>
+  <a class="card" href="/edit"><h3>Поправить форму или текстуру</h3><span class="help">Выделить место кистью, сгладить, сместить, нарисовать, подвинуть развёртку (UV). Импорт и экспорт.</span><span class="go">Открыть «Правку» →</span></a>
+  <a class="card" href="/model"><h3>Заменить части модели</h3><span class="help">Из чего состоит файл, замена, добавление, удаление части, ремеш.</span><span class="go">Открыть «Модель» →</span></a>
+  <a class="card" href="/review"><h3>Сравнить два варианта</h3><span class="help">Выберите лучший из A и B — оценщик учится на ваших ответах.</span><span class="go">Открыть «Сравнение» →</span></a>
+ </section>
+ <section aria-labelledby="h-ev">
+  <h2 id="h-ev">Оценщик (ИИ-помощник)</h2>
+  <p class="lead">Модель, которая сравнивает варианты. Работает и без неё: нужна только для автоматической оценки. Отмечена точкой та, что используется сейчас.</p>
+ </section>
+ <section id="pr" class="cnt" style="flex-direction:column;align-items:stretch;gap:12px" aria-live="polite"></section>
+ <div class="cnt"><button class="btn" id="badd" onclick="add()">+ Добавить профиль</button><button class="btn primary" id="bsave" onclick="sv()" disabled>Сохранить</button><span class="help" id="dirty">Изменений нет</span></div>
+ <details class="card"><summary>Журнал сервера</summary><pre id="lg" aria-live="off">Пусто</pre></details>
+</main>
+<footer class="status"><span id="st">Готово</span></footer>
+<div id="toasts" aria-live="polite"></div>
+<script>
+let C={profiles:[],active:0},D=false;const $=i=>document.getElementById(i);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t,k){const e=document.createElement('div');e.className='toast '+(k||'');e.textContent=t;$('toasts').appendChild(e);setTimeout(()=>e.remove(),k=='err'?7000:3500)}
+function dirty(v){D=v;$('bsave').disabled=!v;$('dirty').textContent=v?'Есть несохранённые изменения':'Изменений нет'}
+async function init(){try{C=await (await fetch('/api/config')).json()}catch(e){toast('Не удалось загрузить настройки','err')}draw()}
+function draw(){const P=C.profiles;$('pr').innerHTML=P.length?P.map((p,i)=>`<div class="card prof ${C.active==i?'on':''}">
+<label class="use"><input type="radio" name="a" ${C.active==i?'checked':''} onchange="C.active=${i};dirty(true);draw()" aria-label="Использовать профиль ${esc(p.name)}"> <b>Используется</b></label>
+<div class="fld"><label for="n${i}">Название</label><input id="n${i}" type="text" value="${esc(p.name)}" onchange="C.profiles[${i}].name=this.value;dirty(true)"></div>
+<div class="fld"><label for="k${i}">Тип</label><select id="k${i}" onchange="C.profiles[${i}].kind=this.value;dirty(true)"><option value="ollama" ${p.kind=='ollama'?'selected':''}>Ollama</option><option value="openai" ${p.kind!='ollama'?'selected':''}>OpenAI-совместимый</option></select></div>
+<div class="fld"><label for="u${i}">Адрес</label><input id="u${i}" type="text" value="${esc(p.url)}" onchange="C.profiles[${i}].url=this.value;dirty(true)"></div>
+<div class="fld"><label for="m${i}">Модель</label><input id="m${i}" type="text" value="${esc(p.model)}" onchange="C.profiles[${i}].model=this.value;dirty(true)"></div>
+<div class="acts"><button class="btn" onclick="chk(${i})">Проверить связь</button><span id="r${i}" class="pill" hidden></span><span style="flex:1"></span><button class="btn danger" onclick="del(${i})" ${P.length<2?'disabled title="Нужен хотя бы один профиль"':''}>Удалить</button></div></div>`).join(''):'<div class="card mut">Профилей нет. Нажмите «+ Добавить профиль».</div>'}
+function add(){C.profiles.push({name:'Новый профиль',kind:'ollama',url:'http://127.0.0.1:11434',model:'',role:'judge'});dirty(true);draw();toast('Профиль добавлен — заполните поля и нажмите «Сохранить»')}
+function del(i){const n=C.profiles[i].name;C.profiles.splice(i,1);if(C.active>=C.profiles.length)C.active=0;dirty(true);draw();toast('Удалён «'+n+'». Не сохраняйте, чтобы вернуть — обновите страницу')}
+async function sv(){$('st').textContent='Сохраняю…';const r=await fetch('/api/config',{method:'POST',body:JSON.stringify(C)});$('st').textContent='Готово';if(r.ok){dirty(false);toast('Настройки сохранены','ok')}else toast('Не удалось сохранить','err')}
+async function chk(i){const s=$('r'+i);s.hidden=false;s.className='pill';s.textContent='Проверяю…';await sv();
+ try{const r=await (await fetch('/api/check?i='+i)).json();s.className='pill '+(r.ok?'ok':'err');s.textContent=r.ok?'✓ Связь есть: '+(r.models||[]).slice(0,3).join(', '):'✗ '+r.error}catch(e){s.className='pill err';s.textContent='✗ Сервер не ответил'}}
+setInterval(async()=>{try{const l=await (await fetch('/api/log')).json();$('lg').textContent=l.length?l.join('\n'):'Пусто'}catch(e){}},2000);
+addEventListener('beforeunload',e=>{if(D){e.preventDefault();e.returnValue=''}});
+init();
+</script></body></html>

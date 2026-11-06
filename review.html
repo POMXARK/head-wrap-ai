@@ -1,0 +1,50 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Сравнение вариантов</title><link rel="stylesheet" href="/ui.css">
+<style>
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--s3)}
+.pair figure{margin:0;display:flex;flex-direction:column;gap:6px;text-align:center}
+.pair img{width:100%;border:2px solid var(--line);border-radius:var(--r);cursor:crosshair;user-select:none;-webkit-user-drag:none}
+.pair figcaption{font-weight:600}
+.acts{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center}
+.btn.ab{min-width:120px}
+kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font:12px monospace;background:var(--panel2)}
+.done{display:flex;gap:var(--s2);padding:6px 0;border-top:1px solid var(--line);font-size:13px}.done:first-child{border-top:0}
+#st{flex-direction:row;gap:var(--s4);flex-wrap:wrap}
+.stat b{display:block;font-size:20px}
+</style></head><body>
+<header class="top"><h1>Сравнение вариантов</h1><span class="sp"></span><a href="/">Главная</a><a href="/pipeline">Конвейер</a><a href="/edit">Правка</a><a href="/model">Модель</a></header>
+<main class="wrap">
+ <section><h2>Какой вариант лучше?</h2><p class="lead">Вам показывают два варианта одной проблемы — A и B. Выберите лучший. Ваши ответы учат оценщика, и со временем он решает сам.</p></section>
+ <div class="card" id="st" aria-live="polite">Загрузка…</div>
+ <div class="card" id="foc"></div>
+ <section class="card" id="cur" aria-live="polite"></section>
+ <details class="card" open><summary>История</summary><div id="hist"></div></details>
+</main>
+<footer class="status"><span>Клавиши: <kbd>A</kbd> A лучше · <kbd>B</kbd> B лучше · <kbd>S</kbd> пропустить. Выделите мышью место на картинке, чтобы сравнивать только его.</span></footer>
+<div id="toasts" aria-live="polite"></div>
+<script>
+const $=i=>document.getElementById(i);const img=(p,b)=>'/api/img?p='+encodeURIComponent(p)+(b?'&box='+b:'');
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t,k){const e=document.createElement('div');e.className='toast '+(k||'');e.textContent=t;$('toasts').appendChild(e);setTimeout(()=>e.remove(),3000)}
+const CH={a:'A лучше',b:'B лучше',same:'одинаково',both_worse:'оба хуже',skip:'пропуск'};
+let curId=null,curKey='';
+async function sf(box,name){await fetch('/api/focus',{method:'POST',body:JSON.stringify({box,name})});curKey='';load()}
+async function load(){let r;try{r=await (await fetch('/api/pairs')).json()}catch(e){return}const P=r.pairs,s=r.stats;
+ const st=(n,l)=>`<div class="stat"><b>${n}</b><span class="help">${l}</span></div>`;
+ $('st').innerHTML=st(s.pairs,'пар всего')+st(s.pending,'ждут ответа')+st(s.voted,'ваших выборов')+st(s.auto,'решил оценщик')+st(s.evaluator_acc==null?'—':Math.round(s.evaluator_acc*100)+'%','точность оценщика на '+s.evaluator_votes+' ваших выборах');
+ const f=r.focus;$('foc').innerHTML='<b>Область работы:</b> '+(f?`${esc(f.name||'выбранная')} <span class="help">[${f.box}]</span> <button class="btn" onclick="sf(null)">Снять</button>`:'вся картинка')+' <span class="help">— выделите мышью место на картинке A, B или «до», чтобы сравнивать только его</span>';
+ const q=P.filter(p=>p.status=='pending')[0];const key=q?q.id+'|'+(q.box||'')+'|'+JSON.stringify(r.focus):'none';
+ if(key!=curKey){curKey=key;curId=q?q.id:null;
+  $('cur').innerHTML=q?`<h3>#${q.id} · ${esc(q.problem)}: ${esc(q.question)}</h3>${q.pred_a!=null?`<div class="help">Оценщик думает: A лучше с вероятностью ${Math.round(q.pred_a*100)}%</div>`:''}${q.vlm?`<div class="help">Судья по картинкам: лучше ${esc(String(q.vlm).toUpperCase())}</div>`:''}
+  <div class="pair">${q.base?`<figure><img class="sel" src="${img(q.base)}" alt="До"><figcaption>До</figcaption></figure>`:''}<figure><img class="sel" src="${img(q.a.img,q.box)}" alt="Вариант A"><figcaption>A · ${esc(q.a.label)}</figcaption></figure><figure><img class="sel" src="${img(q.b.img,q.box)}" alt="Вариант B"><figcaption>B · ${esc(q.b.label)}</figcaption></figure></div>
+  <div class="acts"><button class="btn primary ab" onclick="v(${q.id},'a')">A лучше</button><button class="btn primary ab" onclick="v(${q.id},'b')">B лучше</button><button class="btn" onclick="v(${q.id},'same')">Одинаково</button><button class="btn" onclick="v(${q.id},'both_worse')">Оба хуже</button><button class="btn" onclick="v(${q.id},'skip')">Пропустить</button></div>
+  <div class="fld"><label for="nt">Заметка — что не так (необязательно)</label><input id="nt" type="text"></div>`:'<h3>Ждущих пар нет</h3><p class="help">Когда появятся новые варианты, страница покажет их сама.</p>'}
+ $('hist').innerHTML=P.filter(p=>p.status!='pending').reverse().map(p=>`<div class="done"><span class="mut">#${p.id}</span><span>${esc(p.problem)}: ${esc(p.a.label)} и ${esc(p.b.label)} → <b>${esc(CH[p.choice]||p.choice)}</b> <span class="mut">(${p.status=='auto'?'оценщик':'вы'})</span> ${esc(p.note||'')}</span></div>`).join('')||'<span class="help">Пока пусто</span>'}
+async function v(id,c){const n=$('nt')?$('nt').value:'';await fetch('/api/vote',{method:'POST',body:JSON.stringify({id,choice:c,note:n})});toast('Принято: '+CH[c],'ok');curKey='';load()}
+addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.ctrlKey||e.metaKey||e.altKey||curId==null)return;
+ const m={KeyA:'a',KeyB:'b',KeyS:'skip'}[e.code];if(m){e.preventDefault();v(curId,m)}});
+setInterval(load,4000);load();
+let d0=null;document.addEventListener('mousedown',e=>{if(e.target.classList&&e.target.classList.contains('sel')&&!e.target.src.includes('box=')){d0={x:e.offsetX,y:e.offsetY,im:e.target};e.preventDefault()}});
+document.addEventListener('mouseup',async e=>{if(!d0)return;const im=d0.im,k=im.naturalWidth/im.width,x0=Math.min(d0.x,e.offsetX)*k,x1=Math.max(d0.x,e.offsetX)*k,y0=Math.min(d0.y,e.offsetY)*k,y1=Math.max(d0.y,e.offsetY)*k;d0=null;
+ if(x1-x0>8&&y1-y0>8){const S=2048/Math.max(im.naturalWidth,im.naturalHeight);sf([x0,y0,x1,y1].map(v=>Math.round(v*S)),'drawn')}})
+</script></body></html>

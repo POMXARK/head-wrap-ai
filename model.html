@@ -1,0 +1,57 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Модель: части и замена</title><link rel="stylesheet" href="/ui.css">
+<style>
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--mut);font-weight:600;background:var(--panel2)}
+.tw{overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
+.row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--s3)}
+.acts{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center}
+</style></head><body>
+<header class="top"><h1>Модель: части и замена</h1><span class="sp"></span><a href="/">Главная</a><a href="/pipeline">Конвейер</a><a href="/edit">Правка</a><a href="/review">Сравнение</a></header>
+<main class="wrap">
+ <section><h2>1. Выберите файл</h2><p class="lead">Любая GLB-модель, не только голова. Исходный файл не меняется — результат всегда пишется в новый файл.</p></section>
+ <div class="fld" style="max-width:480px"><label for="f">Файл</label><select id="f" onchange="show()"></select></div>
+ <div class="tw" id="t" aria-live="polite"><div class="card mut">Загрузка…</div></div>
+ <section class="card" aria-labelledby="h2">
+  <h2 id="h2">2. Заменить, добавить или убрать часть</h2>
+  <p class="help">Выберите часть в файле <b id="tg"></b>, затем — откуда брать новую.</p>
+  <div class="row2">
+   <div class="fld"><label for="n">Часть в этом файле</label><select id="n"></select></div>
+   <div class="fld"><label for="sf">Файл-источник</label><select id="sf" onchange="sparts()"></select></div>
+   <div class="fld"><label for="sn">Часть-источник</label><select id="sn"></select></div>
+   <div class="fld"><label for="o">Имя нового файла (необязательно)</label><input id="o" type="text" placeholder="work/new.glb"></div>
+  </div>
+  <div class="acts"><button class="btn primary" id="b-replace" onclick="go('replace')" title="Заменить выбранную часть на часть-источник">Заменить часть</button><button class="btn" id="b-add" onclick="go('add')" title="Добавить часть-источник в файл">Добавить из другого файла</button><button class="btn danger" id="b-remove" onclick="go('remove')" title="Убрать выбранную часть. Исходный файл останется нетронутым">Убрать часть</button></div>
+ </section>
+ <section class="card" aria-labelledby="h3">
+  <h2 id="h3">3. Ремеш и UV-развёртка</h2>
+  <p class="help">Работает с частью, выбранной выше. Заполните одно из полей: целевое число треугольников, длину ребра или число подразбиений.</p>
+  <div class="row2">
+   <div class="fld"><label for="fc">Целевое число треугольников</label><input id="fc" type="number" min="0" placeholder="например 20000"></div>
+   <div class="fld"><label for="ed">Длина ребра</label><input id="ed" type="number" min="0" step="any" placeholder="например 0.01"></div>
+   <div class="fld"><label for="sd">Подразбиений</label><input id="sd" type="number" min="0" max="3" placeholder="0–3"></div>
+  </div>
+  <div class="acts"><button class="btn primary" id="b-remesh" onclick="go('remesh')">Ремеш + новая UV + перенос текстуры</button><button class="btn" id="b-uv" onclick="go('uv')">Только новая UV</button></div>
+ </section>
+ <div class="card" id="res" aria-live="polite" hidden></div>
+</main>
+<footer class="status"><span id="st">Готово</span></footer><div id="toasts" aria-live="polite"></div>
+<script>
+const $=i=>document.getElementById(i);let FILES=[];
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t,k){const e=document.createElement('div');e.className='toast '+(k||'');e.textContent=t;$('toasts').appendChild(e);setTimeout(()=>e.remove(),k=='err'?7000:3500)}
+const opts=a=>a.map(x=>`<option>${esc(x)}</option>`).join('');
+async function init(){const cur=$('f').value;FILES=(await (await fetch('/api/model')).json()).files;$('f').innerHTML=$('sf').innerHTML=opts(FILES);if(FILES.includes(cur))$('f').value=cur;await show();await sparts()}
+async function show(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('f').value))).json();$('tg').textContent=$('f').value;
+$('t').innerHTML='<table><thead><tr><th>Часть</th><th>Вершин</th><th>Треугольников</th><th>UV</th><th>Текстура</th><th>Габариты (min … max)</th></tr></thead><tbody>'+r.parts.map(p=>`<tr><td><b>${esc(p.node)}</b></td><td>${p.vertices}</td><td>${p.triangles}</td><td>${p.uv?'да':'нет'}</td><td>${p.texture?p.texture.join('×'):'—'}</td><td>${esc(p.bbox_min)} … ${esc(p.bbox_max)}</td></tr>`).join('')+'</tbody></table>';
+$('n').innerHTML=opts(r.parts.map(p=>p.node))}
+async function sparts(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('sf').value))).json();$('sn').innerHTML=opts(r.parts.map(p=>p.node))}
+const NAMES={replace:'Замена',add:'Добавление',remove:'Удаление',remesh:'Ремеш',uv:'Новая UV'};
+async function go(op){const bs=document.querySelectorAll('.acts .btn');bs.forEach(b=>b.disabled=true);$('st').textContent='Выполняю: '+NAMES[op]+'…';
+ try{const r=await fetch('/api/model',{method:'POST',body:JSON.stringify({op,target:$('f').value,node:$('n').value,source:$('sf').value,snode:$('sn').value,out:$('o').value,faces:$('fc').value,edge:$('ed').value,subdivide:$('sd').value})});
+  const j=await r.json().catch(()=>({}));$('res').hidden=false;
+  if(j.out){$('res').innerHTML='<b>Готово.</b> Новый файл: <code>'+esc(j.out)+'</code>. Исходный не изменён. Он уже в списке «Файл» выше.';toast(NAMES[op]+': готово → '+j.out,'ok')}
+  else{$('res').innerHTML='<b style="color:var(--err)">Не получилось.</b> Проверьте, что выбрана часть, а для ремеша заполнено одно из полей.';toast(NAMES[op]+': ошибка','err')}
+  await init()}catch(e){toast('Сервер не ответил','err')}
+ bs.forEach(b=>b.disabled=false);$('st').textContent='Готово'}
+init()
+</script></body></html>
