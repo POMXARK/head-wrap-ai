@@ -39,12 +39,14 @@ tbody tr{cursor:pointer}tbody tr:hover{background:var(--panel2)}tbody tr.on{back
  </section>
  <section class="card" aria-labelledby="h3">
   <h2 id="h3">3. Ремеш и UV-развёртка</h2>
-  <p class="help">Работает с частью, выбранной выше. Заполните одно из полей: целевое число треугольников, длину ребра или число подразбиений.</p>
+  <p class="help"><b>Зачем:</b> у части слишком тяжёлая или неровная сетка (например, 33 000 треугольников для игры). Ремеш делает её легче или чище, заново строит UV и переносит на неё старую текстуру. Работает с частью, выбранной выше; заполните одно из полей.</p>
+  <p class="help" id="est" aria-live="polite">Что получится: выберите часть и заполните поле — здесь появится оценка.</p>
   <div class="row2">
    <div class="fld"><label for="fc">Целевое число треугольников</label><input id="fc" type="number" min="0" placeholder="например 20000"></div>
    <div class="fld"><label for="ed">Длина ребра</label><input id="ed" type="number" min="0" step="any" placeholder="например 0.01"></div>
    <div class="fld"><label for="sd">Подразбиений</label><input id="sd" type="number" min="0" max="3" placeholder="0–3"></div>
   </div>
+  <p class="help">Исходный файл не меняется: результат — новый файл, он сразу откроется в превью. Вернуться можно кнопкой «Вернуться к исходному» под результатом.</p>
   <div class="acts"><button class="btn primary" id="b-remesh" onclick="go('remesh')">Ремеш + новая UV + перенос текстуры</button><button class="btn" id="b-uv" onclick="go('uv')">Только новая UV</button></div>
  </section>
  <div class="card" id="res" aria-live="polite" hidden></div>
@@ -83,22 +85,35 @@ function Viewer(box,cap,onPick){
  V.hl=name=>{V.sel=name;if(!V.obj)return;V.obj.traverse(o=>{if(!o.isMesh)return;const on=!name||V.partOf(o)==name;
    (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{m.transparent=!on;m.opacity=on?1:.18;m.depthWrite=on;m.needsUpdate=true})})};
  return V}
-let PV=null,SV=null,PARTS=[];
+let PV=null,SV=null,PARTS=[],PINFO={},PREV=null;
 function pick(name){if(!name)return;$('n').value=name;document.querySelectorAll('#t tbody tr').forEach(r=>r.classList.toggle('on',r.dataset.n==name));$('pvc').textContent='Часть: '+name;PV&&PV.hl&&PV.hl(name)}
 async function spick(){if(SV&&SV.hl){SV.hl($('sn').value);$('svc').textContent='Источник: '+$('sn').value}}
 const opts=a=>a.map(x=>`<option>${esc(x)}</option>`).join('');
 async function init(){PV=PV||Viewer($('pv'),$('pvc'),pick);SV=SV||Viewer($('sv'),$('svc'),n=>{if(n){$('sn').value=n;spick()}});const cur=$('f').value;FILES=(await (await fetch('/api/model')).json()).files;$('f').innerHTML=$('sf').innerHTML=opts(FILES);if(FILES.includes(cur))$('f').value=cur;await show();await sparts()}
 async function show(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('f').value))).json();$('tg').textContent=$('f').value;
-PARTS=r.parts.map(p=>p.node);$('t').innerHTML='<table><thead><tr><th>Часть</th><th>Вершин</th><th>Треугольников</th><th>UV</th><th>Текстура</th><th>Габариты (min … max)</th></tr></thead><tbody>'+r.parts.map(p=>`<tr data-n="${esc(p.node)}" tabindex="0" onclick="pick(this.dataset.n)" onkeydown="if(event.key=='Enter')pick(this.dataset.n)"><td><b>${esc(p.node)}</b></td><td>${p.vertices}</td><td>${p.triangles}</td><td>${p.uv?'да':'нет'}</td><td>${p.texture?p.texture.join('×'):'—'}</td><td>${esc(p.bbox_min)} … ${esc(p.bbox_max)}</td></tr>`).join('')+'</tbody></table>';
-$('n').innerHTML=opts(PARTS);$('pvc').textContent='Вся модель';if(PV&&PV.load){PV.sel=null;await PV.load($('f').value,PARTS)}}
+PARTS=r.parts.map(p=>p.node);PINFO={};r.parts.forEach(p=>PINFO[p.node]=p);$('t').innerHTML='<table><thead><tr><th>Часть</th><th>Вершин</th><th>Треугольников</th><th>UV</th><th>Текстура</th><th>Габариты (min … max)</th></tr></thead><tbody>'+r.parts.map(p=>`<tr data-n="${esc(p.node)}" tabindex="0" onclick="pick(this.dataset.n)" onkeydown="if(event.key=='Enter')pick(this.dataset.n)"><td><b>${esc(p.node)}</b></td><td>${p.vertices}</td><td>${p.triangles}</td><td>${p.uv?'да':'нет'}</td><td>${p.texture?p.texture.join('×'):'—'}</td><td>${esc(p.bbox_min)} … ${esc(p.bbox_max)}</td></tr>`).join('')+'</tbody></table>';
+$('n').innerHTML=opts(PARTS);est();$('pvc').textContent='Вся модель';if(PV&&PV.load){PV.sel=null;await PV.load($('f').value,PARTS)}}
 async function sparts(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('sf').value))).json();$('sn').innerHTML=opts(r.parts.map(p=>p.node));if(SV&&SV.load){SV.sel=$('sn').value;await SV.load($('sf').value,r.parts.map(p=>p.node));$('svc').textContent='Источник: '+$('sn').value}}
+function est(){const p=PINFO[$('n').value],e=$('est');if(!p){e.textContent='Что получится: выберите часть выше.';return}
+ const f=+$('fc').value,d=+$('sd').value,l=+$('ed').value;let t;
+ if(f>0)t='≈ '+f+' треугольников (сейчас '+p.triangles+', '+(f<p.triangles?'легче в '+(p.triangles/f).toFixed(1)+' раза':'тяжелее в '+(f/p.triangles).toFixed(1)+' раза')+')';
+ else if(d>0)t='≈ '+p.triangles*Math.pow(4,Math.min(3,d))+' треугольников (сейчас '+p.triangles+', каждое подразбиение ×4)';
+ else if(l>0)t='число треугольников зависит от длины ребра — точное будет видно после (сейчас '+p.triangles+')';
+ else t='сейчас у части «'+$('n').value+'» '+p.triangles+' треугольников; заполните поле, чтобы увидеть, сколько станет';
+ e.textContent='Что получится: '+t+'. Форма и текстура сохраняются, UV строится заново.'}
+['fc','ed','sd','n'].forEach(i=>$(i).addEventListener('input',est));$('n').addEventListener('change',est);
 const NAMES={replace:'Замена',add:'Добавление',remove:'Удаление',remesh:'Ремеш',uv:'Новая UV'};
-async function go(op){const bs=document.querySelectorAll('.acts .btn');bs.forEach(b=>b.disabled=true);$('st').textContent='Выполняю: '+NAMES[op]+'…';
- try{const r=await fetch('/api/model',{method:'POST',body:JSON.stringify({op,target:$('f').value,node:$('n').value,source:$('sf').value,snode:$('sn').value,out:$('o').value,faces:$('fc').value,edge:$('ed').value,subdivide:$('sd').value})});
+async function back(f){$('f').value=f;await show();$('res').hidden=true;toast('Открыт исходный файл '+f,'ok')}
+async function go(op){const bs=document.querySelectorAll('.acts .btn');bs.forEach(b=>b.disabled=true);$('st').textContent='Выполняю: '+NAMES[op]+'… ремеш с UV и текстурой может занять несколько минут, не закрывайте страницу';
+ const src=$('f').value,node=$('n').value,before=PINFO[node];
+ try{const r=await fetch('/api/model',{method:'POST',body:JSON.stringify({op,target:src,node,source:$('sf').value,snode:$('sn').value,out:$('o').value,faces:$('fc').value,edge:$('ed').value,subdivide:$('sd').value})});
   const j=await r.json().catch(()=>({}));$('res').hidden=false;
-  if(j.out){$('res').innerHTML='<b>Готово.</b> Новый файл: <code>'+esc(j.out)+'</code>. Исходный не изменён. Он уже в списке «Файл» выше.';toast(NAMES[op]+': готово → '+j.out,'ok')}
-  else{$('res').innerHTML='<b style="color:var(--err)">Не получилось.</b> Проверьте, что выбрана часть, а для ремеша заполнено одно из полей.';toast(NAMES[op]+': ошибка','err')}
-  await init()}catch(e){toast('Сервер не ответил','err')}
+  if(j.out){await init();let cmp='';
+   if(FILES.includes(j.out)){$('f').value=j.out;await show();const a=PINFO[node];
+    if(before&&a)cmp='<br>Часть «'+esc(node)+'»: было '+before.triangles+' треугольников и '+before.vertices+' вершин → стало '+a.triangles+' и '+a.vertices+'. Новая модель уже в превью выше.'}
+   $('res').innerHTML='<p><b>Готово.</b> Новый файл: <code>'+esc(j.out)+'</code>. Исходный <code>'+esc(src)+'</code> не изменён.'+cmp+'</p><div class="acts"><button class="btn" onclick="back(\''+esc(src)+'\')">Вернуться к исходному</button></div>';toast(NAMES[op]+': готово → '+j.out,'ok')}
+  else{$('res').innerHTML='<p><b style="color:var(--err)">Не получилось.</b> Проверьте, что выбрана часть, а для ремеша заполнено одно из полей. Ничего не изменено.</p>';toast(NAMES[op]+': ошибка','err')}
+ }catch(e){toast('Сервер не ответил','err')}
  bs.forEach(b=>b.disabled=false);$('st').textContent='Готово'}
 init()
 </script></body></html>
