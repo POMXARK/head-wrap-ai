@@ -208,6 +208,12 @@ class H(BaseHTTPRequestHandler):
             import edit_api
             with edit_api.LOCK:
                 self.send(edit_api.state() if path.endswith('state') else edit_api.mesh())
+        elif path == '/api/edit/job':
+            import jobs
+            try:
+                self.send(jobs.get(urllib.parse.parse_qs(q).get('id', [''])[0]))
+            except KeyError:
+                self.send({'error': 'нет такой задачи'})
         elif path == '/edit':
             self.send(open(os.path.join(HERE, 'edit.html'), 'rb').read(), 'text/html')
         elif path == '/model':
@@ -294,6 +300,7 @@ class H(BaseHTTPRequestHandler):
             try:
                 with edit_api.LOCK:
                     r = {'select': edit_api.select, 'save': edit_api.save_selection, 'apply': edit_api.apply, 'replace': edit_api.replace_head,
+                         'replace_job': edit_api.replace_job, 'cancel': lambda x: __import__('jobs').cancel(x['id']),
                          'delete': lambda x: edit_api.delete_selection(x['id']) or {'ok': True},
                          'undo': lambda x: edit_api.history('undo'), 'redo': lambda x: edit_api.history('redo')}[k](d)
                 self.send(r)

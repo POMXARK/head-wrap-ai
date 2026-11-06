@@ -3,6 +3,7 @@ Functions take/return JSON-able dicts; app.py only routes. Selection 'draft' is 
 import json
 import os
 import threading
+import time
 import numpy as np
 import replace_part as RP
 from asset import Asset
@@ -62,32 +63,66 @@ def _donor(name):
     raise ValueError('unknown donor ' + name)
 
 
-def replace_head(d):
-    """d: {donor: template|hero1, scale: match_ring|keep}: put the donor head on the neck socket of the body"""
-    global DRAFT
+def replace_prepare(d, step=lambda msg, frac: None):
+    """the heavy part of replace_head: builds the new head mesh without touching the asset; step() may raise Cancelled"""
     _init()
+    slow = float(os.environ.get('HW_SLOW_STEP', 0))     # debug: pause per step, to watch progress/cancel in the UI
+
+    def step(msg, frac, _s=step):
+        _s(msg, frac)
+        time.sleep(slow)
+    step('читаю донора', 0.1)
+    dV, dF = _donor(d['donor'])
     body = A.parts['body']
+    step('ищу кольца розетки', 0.35)
     bl = RP.boundary_loops(body.F)
     t_ring = max(bl, key=lambda l: body.V[l][:, 1].mean())
-    dV, dF = _donor(d['donor'])
     d_ring = max(RP.boundary_loops(dF), key=len)
+    step('совмещаю голову с шеей', 0.55)
     V, F, rep = RP.replace(body.V, body.F, t_ring, dV, dF, d_ring, d.get('scale', 'match_ring'), outward=[0, 1, 0])
     off = rep['donor_offset']
     seam = d.get('seam', 'bridge')
     hV, hF = V[off:], F[len(body.F):] - off
     if seam == 'bridge':
+        step('сшиваю шов', 0.8)
         # copies of the body ring join the head part; the strip runs from the donor ring to them
         ring_copy = np.arange(len(hV), len(hV) + len(t_ring))
         hV = np.vstack([hV, body.V[t_ring]])
         strip, stretch = RP.bridge(hV, d_ring, ring_copy)
         hF = np.vstack([hF, strip])
         rep['seam_stretch'] = round(stretch, 3)
-    A.replace_mesh('head', hV, hF,
+    step('готово к применению', 0.95)
+    return {'hV': hV, 'hF': hF, 'rep': rep, 'd': d, 'seam': seam}
+
+
+def replace_commit(p):
+    global DRAFT
+    rep, d, seam = p['rep'], p['d'], p['seam']
+    A.replace_mesh('head', p['hV'], p['hF'],
                    {'donor': {'asset': d['donor'], 'part': 'head'}, 'socket': 'neck', 'scale': d.get('scale', 'match_ring'),
                     'seam': seam}, scores={'after': {'ring_gap': round(rep['ring_gap'], 4), 'scale': round(rep['scale'], 4),
                                                      **({'seam_stretch': rep['seam_stretch']} if 'seam_stretch' in rep else {})}})
     DRAFT = Selection(A.parts['head'])
     return {'report': rep, 'donors': DONORS}
+
+
+def replace_head(d):
+    """d: {donor: template|hero1, scale: match_ring|keep}: put the donor head on the neck socket of the body"""
+    return replace_commit(replace_prepare(d))
+
+
+def replace_job(d):
+    """same as replace_head but in the background: progress, ETA, cancel; the asset changes only at the final commit"""
+    import jobs
+
+    def work(step):
+        p = replace_prepare(d, step)
+        step('применяю', 0.97)      # last cancel point; after it the commit is atomic
+        with LOCK:
+            r = replace_commit(p)
+        return {'report': {k: (float(v) if isinstance(v, (np.floating, float)) else v) for k, v in r['report'].items()
+                           if isinstance(v, (int, float, np.floating))}}
+    return {'job': jobs.start(work).id}
 
 
 def state():
