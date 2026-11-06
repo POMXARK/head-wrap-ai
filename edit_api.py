@@ -53,16 +53,123 @@ def _mannequin(head):
 DONORS = {'template': 'шаблон головы (этот же)', 'hero1': 'голова hero1 (work/hero1_head2.glb)'}
 
 
-def _donor(name):
+GAME_GM = os.path.join(os.environ.get('W', os.path.dirname(HERE)), 'corsairs-remake', 'pdm-game', 'data/ai_models/orig/characters')
+GAME_DIR = os.path.join(os.environ.get('W', os.path.dirname(HERE)), 'corsairs-remake')
+EXT = ('.glb', '.gltf', '.obj')
+
+
+def sources():
+    """what a head can be imported from: the template, model files of this folder (work/, models/), game models (.gm)"""
+    import glob
+    out = [{'id': 'template', 'label': 'шаблон головы (этот же)'}]
+    for d in ('work', 'work/imported', 'models'):
+        for f in sorted(glob.glob(os.path.join(HERE, d, '*'))):
+            if f.lower().endswith(EXT):
+                out.append({'id': 'file:' + os.path.relpath(f, HERE), 'label': os.path.relpath(f, HERE)})
+    for f in sorted(glob.glob(os.path.join(GAME_GM, '*.gm'))):
+        n = os.path.basename(f)[:-3]
+        out.append({'id': 'gm:' + n, 'label': 'из игры: %s.gm' % n})
+    return out
+
+
+def _gm_to_glb(name):
+    """a game model (.gm) as a GLB in work/imported/ with the game's own converter (tools/pdm_gm2glb.py); returns the path relative to this folder"""
+    import re
+    import subprocess
+    import sys
+    if not re.fullmatch(r'[\w.-]+', name) or not os.path.isfile(os.path.join(GAME_GM, name + '.gm')):
+        raise ValueError('нет такой модели игры: ' + name)
+    rel = 'work/imported/%s.glb' % name
+    out = os.path.join(HERE, rel)
+    if not os.path.exists(out):
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        r = subprocess.run([sys.executable, 'tools/pdm_gm2glb.py', 'pdm-game', name, '--out', out, '--no-rig'], cwd=GAME_DIR,
+                           capture_output=True, text=True, timeout=300)
+        if r.returncode or not os.path.exists(out):
+            raise ValueError('конвертер .gm не отработал: ' + (r.stderr or r.stdout)[-300:])
+    return rel
+
+
+def _resolve(name):
+    """donor id -> (path of a model file | None for the template)"""
     if name == 'template':
+        return None
+    if name == 'hero1':
+        return 'work/hero1_head2.glb'
+    if name.startswith('gm:'):
+        return _gm_to_glb(name[3:])
+    if name.startswith('file:'):
+        f = os.path.realpath(os.path.join(HERE, name[5:]))
+        if not f.startswith(HERE + os.sep) or not f.lower().endswith(EXT) or not os.path.isfile(f):
+            raise ValueError('файл недоступен: ' + name)
+        return os.path.relpath(f, HERE)
+    raise ValueError('unknown donor ' + name)
+
+
+def donor_parts(name):
+    """[{name, vertices}] of the meshes inside a donor file (the user picks the head among them)"""
+    import trimesh
+    rel = _resolve(name)
+    if rel is None:
+        return [{'name': 'head', 'vertices': len(A.parts['head'].V) if A else 0}]
+    g = trimesh.load(os.path.join(HERE, rel), force='scene').geometry
+    return [{'name': k, 'vertices': int(len(v.vertices))} for k, v in g.items()]
+
+
+def _donor(name, part=None):
+    rel = _resolve(name)
+    if rel is None:
         m = load_obj(os.path.join(HERE, 'template/head_sub.obj'))
         return m.V, m.F
-    if name == 'hero1':
-        import trimesh
-        g = trimesh.load(os.path.join(HERE, 'work/hero1_head2.glb'), force='scene').geometry['geometry_0']
-        V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
-        return V, inv.ravel()[g.faces]
-    raise ValueError('unknown donor ' + name)
+    import trimesh
+    geoms = trimesh.load(os.path.join(HERE, rel), force='scene').geometry
+    g = geoms[part] if part in geoms else (geoms['geometry_0'] if name == 'hero1' else max(geoms.values(), key=lambda x: len(x.vertices)))
+    V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
+    return V, inv.ravel()[g.faces]
+
+
+def save_upload(name, data):
+    """a model file picked by the user, into models/ (the library)"""
+    import re
+    base = re.sub(r'[^\w.-]+', '_', os.path.basename(name or 'upload.glb'))
+    if not base.lower().endswith(EXT):
+        raise ValueError('нужен файл .glb, .gltf или .obj')
+    if len(data) > 64 << 20:
+        raise ValueError('файл больше 64 МБ')
+    os.makedirs(os.path.join(HERE, 'models'), exist_ok=True)
+    with open(os.path.join(HERE, 'models', base), 'wb') as f:
+        f.write(data)
+    return {'id': 'file:models/' + base}
+
+
+def export_bytes(fmt, body=False):
+    """(bytes, content type, file name) of the current head: glb | obj | png; with the edited texture and UV while they exist"""
+    _init()
+    import texture
+    h = A.parts['head']
+    if fmt == 'png':
+        return texture.png(), 'image/png', 'head_texture.png'
+    uvok = texture.available(h)
+    if fmt == 'obj':
+        plain = ('\n'.join('v %.5f %.5f %.5f' % tuple(v) for v in h.V) + '\n' +
+                 '\n'.join('f %d %d %d' % (a + 1, b + 1, c + 1) for a, b, c in h.F) + '\n').encode()
+        return (texture.obj_text(h) if uvok else plain), 'text/plain', 'head_edit.obj'
+    if fmt != 'glb':
+        raise ValueError('unknown format ' + fmt)
+    import trimesh
+    sc = trimesh.Scene()
+    if uvok:
+        S = texture._init()
+        mh = trimesh.Trimesh(h.V[S['F']].reshape(-1, 3), np.arange(3 * len(S['F'])).reshape(-1, 3), process=False)
+        mh.visual = trimesh.visual.TextureVisuals(uv=S['vt'][S['T']].reshape(-1, 2), material=trimesh.visual.material.PBRMaterial(
+            baseColorTexture=texture.pil()))
+    else:
+        mh = trimesh.Trimesh(h.V, h.F, process=False)
+    sc.add_geometry(mh, node_name='head', geom_name='head')
+    if body:
+        b = A.parts['body']
+        sc.add_geometry(trimesh.Trimesh(b.V, b.F, process=False), node_name='body', geom_name='body')
+    return sc.export(file_type='glb'), 'model/gltf-binary', 'head_edit.glb'
 
 
 def replace_prepare(d, step=lambda msg, frac: None):
@@ -74,7 +181,7 @@ def replace_prepare(d, step=lambda msg, frac: None):
         _s(msg, frac)
         time.sleep(slow)
     step('читаю донора', 0.1)
-    dV, dF = _donor(d['donor'])
+    dV, dF = _donor(d['donor'], d.get('part'))
     body = A.parts['body']
     step('ищу кольца розетки', 0.35)
     bl = RP.boundary_loops(body.F)
@@ -138,7 +245,7 @@ def state():
     return {'regions': REG['names'], 'draft': int(DRAFT.count()), 'draft_vertices': DRAFT.vertices(), 'vertices': len(m.V),
             'selections': [{'id': i, 'name': meta['name'], 'count': s.count(), 'feather': meta['feather']}
                            for i, (s, meta) in A.sel.items()],
-            'ops': [dict(o, stale_scores=bool(o.get('scores')) and i < len(A.log) - 1) for i, o in enumerate(A.log)], 'donors': DONORS, 'can_undo': bool(A._undo), 'can_redo': bool(A._redo)}
+            'ops': [dict(o, stale_scores=bool(o.get('scores')) and i < len(A.log) - 1) for i, o in enumerate(A.log)], 'donors': DONORS, 'sources': sources(), 'can_undo': bool(A._undo), 'can_redo': bool(A._redo)}
 
 
 def mesh():

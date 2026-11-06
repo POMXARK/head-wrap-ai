@@ -164,16 +164,26 @@ def status():
     return {'can_undo': bool(s['undo']), 'can_redo': bool(s['redo']), 'rev': s['rev']}
 
 
+def pil():
+    return Image.fromarray(_init()['tex'])
+
+
+def obj_text(head):
+    """OBJ bytes: current vertices, edited UV"""
+    s = _init()
+    out = ['# head with edited UV (head-wrap-ai)']
+    out += ['v %.5f %.5f %.5f' % tuple(v) for v in head.V]
+    out += ['vt %.5f %.5f' % tuple(t) for t in s['vt']]
+    out += ['f %d/%d %d/%d %d/%d' % (a + 1, ta + 1, b + 1, tb + 1, c + 1, tc + 1) for (a, b, c), (ta, tb, tc) in zip(s['F'], s['T'])]
+    return ('\n'.join(out) + '\n').encode()
+
+
 def export(head):
     """work/head_edit.png + work/head_edit.obj (current vertices, edited UV)"""
     s = _init()
     _need(head)
     os.makedirs(os.path.join(HERE, 'work'), exist_ok=True)
     Image.fromarray(s['tex']).save(os.path.join(HERE, 'work/head_edit.png'))
-    with open(os.path.join(HERE, 'work/head_edit.obj'), 'w') as f:
-        f.write('# head with edited UV (head-wrap-ai)\n')
-        f.writelines('v %.5f %.5f %.5f\n' % tuple(v) for v in head.V)
-        f.writelines('vt %.5f %.5f\n' % tuple(t) for t in s['vt'])
-        f.writelines('f %d/%d %d/%d %d/%d\n' % (a + 1, ta + 1, b + 1, tb + 1, c + 1, tc + 1)
-                     for (a, b, c), (ta, tb, tc) in zip(s['F'], s['T']))
+    with open(os.path.join(HERE, 'work/head_edit.obj'), 'wb') as f:
+        f.write(obj_text(head))
     return {'files': ['work/head_edit.png', 'work/head_edit.obj']}

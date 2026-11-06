@@ -12,7 +12,7 @@ button,select,input{font:inherit;color:var(--fg)}
 .mut{color:var(--mut)}
 /* верхняя полоса */
 .top{display:flex;align-items:center;gap:var(--s2);padding:0 var(--s3);background:var(--panel);border-bottom:1px solid var(--line)}
-.top h1{font-size:15px;font-weight:650;margin:0 var(--s3) 0 0}
+.top h1{white-space:nowrap;font-size:15px;font-weight:650;margin:0 var(--s3) 0 0}
 .top .sp{flex:1}
 .top a{color:var(--mut);text-decoration:none;padding:6px 8px;border-radius:6px}.top a:hover{background:var(--panel2);color:var(--fg)}
 .sep{width:1px;height:24px;background:var(--line);margin:0 var(--s1)}
@@ -56,6 +56,9 @@ kbd{font:11px ui-monospace,monospace;padding:1px 5px;border:1px solid var(--line
 #uvc{position:absolute;inset:0;width:100%;height:100%;display:none;touch-action:none}
 #vm{width:250px}
 input[type=color]{width:100%;height:36px;padding:2px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:0;width:min(520px,94vw);box-shadow:var(--shadow)}dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog .hd{display:flex;justify-content:space-between;align-items:center;padding:12px var(--s3);border-bottom:1px solid var(--line);font-weight:650}dialog .bd{padding:var(--s3);display:flex;flex-direction:column;gap:12px}
+a.btn{text-decoration:none;color:var(--fg)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
 .fld{display:flex;flex-direction:column;gap:4px}
 .fld .lb{display:flex;justify-content:space-between;color:var(--mut);font-size:13px}
@@ -80,9 +83,10 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 </style></head><body>
 <header class="top">
  <h1>Правка области</h1>
- <button class="btn" id="bu" title="Отменить последнюю правку модели" onclick="hist('undo')">↶ Отменить правку</button>
- <button class="btn" id="br" title="Вернуть правку модели" onclick="hist('redo')">↷ Вернуть правку</button>
+ <button class="btn" id="bu" title="Отменить последнюю правку модели" onclick="hist('undo')">↶ Отменить</button>
+ <button class="btn" id="br" title="Вернуть правку модели" onclick="hist('redo')">↷ Вернуть</button>
  <span class="sep"></span>
+ <button class="btn" onclick="$('dlg').showModal()" title="Загрузить голову из файла или игры, сохранить результат">Файл</button>
  <button class="btn" id="bb" onclick="toggleBefore()" title="Сравнить с состоянием до последней правки">Показать «до»</button>
  <span class="sep"></span>
  <div class="seg" id="vm" role="group" aria-label="Что показывать"><button id="v-mesh" aria-pressed="true" onclick="setView('mesh')">Сетка</button><button id="v-tex" aria-pressed="false" onclick="setView('tex')">Текстура</button><button id="v-uv" aria-pressed="false" onclick="setView('uv')">UV</button></div>
@@ -144,11 +148,12 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
    <div class="fld"><div class="lb"><span>Угол</span><b id="van">15°</b></div><input id="an" type="range" min="-90" max="90" step="5" value="15" oninput="van.textContent=this.value+'°'" aria-label="Угол поворота"></div>
    <button class="btn wide" id="bur" onclick="uvX('rotate')">Повернуть развёртку</button>
   </div></details>
-  <details class="sec"><summary>5. Заменить голову</summary><div class="bd">
-   <div class="help">Голова донора встаёт на розетку «шея» манекена.</div>
-   <div class="fld"><div class="lb"><span>Донор</span></div><select id="dn" aria-label="Донор"></select></div>
+  <details class="sec" id="s-imp"><summary>5. Импорт головы</summary><div class="bd">
+   <div class="help">Голова из выбранного источника встаёт на розетку «шея» манекена. Источник — шаблон, файл проекта, загруженный файл или модель игры.</div>
+   <div class="fld"><div class="lb"><span>Донор</span></div><select id="dn" aria-label="Донор" onchange="loadParts()"></select></div>
+   <div class="fld"><div class="lb"><span>Часть файла (голова)</span></div><select id="dpart" aria-label="Часть файла"></select></div>
    <div class="fld"><div class="lb"><span>Масштаб</span></div><select id="sc" aria-label="Масштаб"><option value="match_ring">по кольцу шеи</option><option value="keep">не менять</option></select></div>
-   <button class="btn primary wide" id="brp" onclick="rep()">Заменить голову</button>
+   <button class="btn primary wide" id="brp" onclick="rep()">Импортировать голову</button>
    <div id="prog" hidden><div class="prog"><i id="pb"></i></div><div class="grid2" style="grid-template-columns:1fr auto;align-items:center;margin-top:8px"><span id="pm" class="help"></span><button class="btn" id="pc" onclick="cancelJob()">Отмена</button></div></div>
    <div id="rrep" class="box" hidden></div>
    <div id="sg0"></div>
@@ -157,6 +162,13 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
  </aside>
 </div>
 <footer class="status"><span id="st">Готово</span><span class="sp" style="flex:1"></span><span>Вне выделения модель не меняется (проверяется тестами)</span></footer>
+<dialog id="dlg" aria-labelledby="dlgt"><div class="hd"><span id="dlgt">Файл: импорт и экспорт</span><button class="btn" aria-label="Закрыть" onclick="$('dlg').close()">✕</button></div><div class="bd">
+ <div><b>Экспорт</b><div class="help" id="xh" style="margin:4px 0 8px"></div>
+  <label class="btn" style="justify-content:flex-start;margin-bottom:8px"><input type="checkbox" id="xb" onchange="xlinks()"> Вместе с манекеном (тело)</label>
+  <div class="grid2"><a class="btn" id="x-glb" download>GLB (Blender, игра)</a><a class="btn" id="x-obj" download>OBJ</a><a class="btn" id="x-png" download>Текстура PNG</a><button class="btn" onclick="texExport()" title="Файлы work/head_edit.png и work/head_edit.obj на диске проекта">Сохранить в work/</button></div></div>
+ <div><b>Импорт</b><div class="help" style="margin:4px 0 8px">Голова из файла встаёт на шею манекена так же, как донор в разделе «5. Импорт головы». Модели игры (.gm) переводятся в GLB конвертером игры.</div>
+  <div class="grid2" style="grid-template-columns:1fr"><label class="btn" style="cursor:pointer">Загрузить файл с компьютера (.glb, .gltf, .obj)<input type="file" id="ifile" accept=".glb,.gltf,.obj" hidden onchange="upload(this.files[0])"></label><button class="btn" onclick="$('dlg').close();$('s-imp').open=true;$('s-imp').scrollIntoView()">Выбрать из проекта или игры…</button></div></div>
+</div></dialog>
 <div id="toasts" aria-live="polite"></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -251,7 +263,7 @@ async function reloadMesh(fit,url){showB=false;$('bb').classList.remove('on');$(
  S.remove(mesh);geo.dispose();geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));mesh.geometry=geo;S.add(mesh);
  geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true);if(!url){await tinfo();if(view!='mesh'&&!TI.available)await setView('mesh');else await refreshView()}}
 let JOB=null;
-async function rep(){const r=await post('replace_job',{donor:$('dn').value,scale:$('sc').value});if(r.error){toast(r.error,'err');return}
+async function rep(){const r=await post('replace_job',{donor:$('dn').value,part:$('dpart').value,scale:$('sc').value});if(r.error){toast(r.error,'err');return}
  JOB=r.job;$('prog').hidden=false;$('pc').hidden=false;$('rrep').hidden=true;$('brp').disabled=true;setSt('Заменяю голову…');
  for(;;){const j=await (await fetch('/api/edit/job?id='+JOB)).json();
   $('pb').style.width=Math.round((j.progress||0)*100)+'%';$('pm').textContent=j.msg+' · '+Math.round((j.progress||0)*100)+'%'+(j.eta_s!=null?' · ~'+j.eta_s+' с':'');
@@ -265,12 +277,20 @@ async function rep(){const r=await post('replace_job',{donor:$('dn').value,scale
 const cancelJob=()=>JOB&&post('cancel',{id:JOB});
 async function refresh(){const st=await (await fetch('/api/edit/state')).json();info(st)}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function info(st){if(!$('dn').options.length)Object.entries(st.donors).forEach(([k,v])=>{const o=document.createElement('option');o.value=k;o.textContent=v;$('dn').append(o)});
+function info(st){fillSrc(st.sources);
  nops=st.ops.length;sync();
  $('log').innerHTML=st.ops.length?st.ops.map((o,i)=>'<li><span class="mut">'+(i+1)+'.</span><span>'+esc(o.op)+(o.selection?' · '+esc(o.selection):'')+' <span class="mut">'+esc(JSON.stringify(o.params))+'</span>'+(o.stale_scores?'<br><span class="w">⚠ оценка устарела: после неё были правки</span>':'')+'</span></li>').join(''):'<li class="mut">Пока пусто</li>';
  $('saved').innerHTML=st.selections.map(s=>'<div class="saved"><span class="n"><b>'+esc(s.name)+'</b> <span class="mut">'+s.count+' вершин</span></span><button class="btn" onclick="loadSel(\''+s.id+'\')">Выбрать</button><button class="btn" aria-label="Удалить область" onclick="delSel(\''+s.id+'\')">✕</button></div>').join('')}
 async function loadSel(id){snap();res(await post('select',{action:'load',id}))}
 async function delSel(id){await post('delete',{id});refresh()}
+/* импорт и экспорт */
+function fillSrc(src,pick){const cur=pick||$('dn').value;$('dn').innerHTML=src.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.label)+'</option>').join('');if(cur&&src.some(x=>x.id==cur))$('dn').value=cur;if(!$('dpart').options.length||pick)loadParts()}
+async function loadParts(){const r=await (await fetch('/api/edit/parts?src='+encodeURIComponent($('dn').value))).json();if(r.error){toast(r.error,'err');$('dpart').innerHTML='';return}
+ const big=r.parts.reduce((a,b)=>b.vertices>a.vertices?b:a,r.parts[0]);$('dpart').innerHTML=r.parts.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+' ('+p.vertices+' вершин)</option>').join('');$('dpart').value=big.name;$('dpart').disabled=r.parts.length<2}
+async function upload(f){if(!f)return;if(f.size>64<<20){toast('Файл больше 64 МБ','err');return}const r=await (await fetch('/api/edit/upload?name='+encodeURIComponent(f.name),{method:'POST',body:f})).json();$('ifile').value='';
+ if(r.error){toast(r.error,'err');return}const st=await (await fetch('/api/edit/state')).json();fillSrc(st.sources,r.id);$('dlg').close();$('s-imp').open=true;toast('Файл загружен. Выберите часть с головой и нажмите «Импортировать голову»','ok')}
+function xlinks(){const b=$('xb').checked?'&body=1':'';for(const f of['glb','obj','png'])$('x-'+f).href='/api/edit/export?fmt='+f+(f=='glb'?b:'');$('xh').textContent=TI.available?'Голова с текущими правками формы, текстуры и UV.':'Только форма головы: после замены головы текстуры и UV нет.'}
+$('dlg').addEventListener('toggle',xlinks);xlinks();
 /* текстура и UV */
 async function tinfo(){const r=await (await fetch('/api/edit/tex_info')).json();if(!r.error)TI=r;sync()}
 function loadTexImg(){return new Promise(res=>{const im=new Image();im.onload=()=>{TX.width=im.width;TX.height=im.height;TX.getContext('2d').drawImage(im,0,0);if(ttex)ttex.needsUpdate=true;drawUV();res()};im.onerror=()=>res();im.src='/api/edit/texture.png?r='+Date.now()})}

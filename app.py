@@ -212,6 +212,28 @@ class H(BaseHTTPRequestHandler):
                                'uv_layout': edit_api.uv_layout, 'mesh_uv': edit_api.mesh_uv}[path.rsplit('/', 1)[1]]())
                 except ValueError as e:
                     self.send({'error': str(e)})
+        elif path == '/api/edit/parts':
+            import edit_api
+            try:
+                with edit_api.LOCK:
+                    edit_api._init()
+                    self.send({'parts': edit_api.donor_parts(urllib.parse.parse_qs(q).get('src', [''])[0])})
+            except Exception as e:
+                self.send({'error': str(e)})
+        elif path == '/api/edit/export':
+            import edit_api
+            qq = urllib.parse.parse_qs(q)
+            try:
+                with edit_api.LOCK:
+                    b, ct, fn = edit_api.export_bytes(qq.get('fmt', ['glb'])[0], qq.get('body', ['0'])[0] == '1')
+                self.send_response(200)
+                self.send_header('Content-Type', ct)
+                self.send_header('Content-Disposition', 'attachment; filename="%s"' % fn)
+                self.send_header('Content-Length', str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+            except Exception as e:
+                self.send({'error': str(e)})
         elif path == '/api/edit/texture.png':
             import edit_api
             import texture
@@ -308,6 +330,15 @@ class H(BaseHTTPRequestHandler):
                 self.send_error(400)
                 return
             self.send({'ok': True, 'out': os.path.relpath(out, HERE)})
+            return
+        if self.path.startswith('/api/edit/upload'):
+            import edit_api
+            try:
+                with edit_api.LOCK:
+                    self.send(edit_api.save_upload(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('name', [''])[0],
+                                                   self.rfile.read(int(self.headers.get('Content-Length') or 0))))
+            except Exception as e:
+                self.send({'error': str(e)})
             return
         if self.path.startswith('/api/edit/'):
             import edit_api
