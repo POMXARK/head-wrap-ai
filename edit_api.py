@@ -12,6 +12,8 @@ from selection import Selection, load_obj
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOCK = threading.Lock()
 A = None
+SESSION = __import__('uuid').uuid4().hex[:6]
+_IDS, _REDO_IDS = [], []      # edit_log ids parallel to the undo stack of A (None for ops that are not logged)
 DRAFT = None
 REG = json.load(open(os.path.join(HERE, 'template/regions.json')))
 
@@ -103,6 +105,11 @@ def replace_commit(p):
                     'seam': seam}, scores={'after': {'ring_gap': round(rep['ring_gap'], 4), 'scale': round(rep['scale'], 4),
                                                      **({'seam_stretch': rep['seam_stretch']} if 'seam_stretch' in rep else {})}})
     DRAFT = Selection(A.parts['head'])
+    import edit_log
+    _IDS.append(edit_log.record('user', 'replace_part', {'donor': d['donor'], 'scale': d.get('scale', 'match_ring'), 'seam': seam}, 0,
+                                {'count': len(A.parts['head'].V), 'centroid': [0, 0, 0], 'bbox': None, 'regions': ['head']},
+                                {'after': {k: v for k, v in rep.items() if k in ('ring_gap', 'scale', 'seam_stretch')}}, SESSION))
+    _REDO_IDS.clear()
     return {'report': rep, 'donors': DONORS}
 
 
@@ -218,6 +225,16 @@ def delete_selection(sid):
     A.sel.pop(sid, None)
 
 
+def _regions_of(ids):
+    """names of template regions the area mostly touches (only when the head is the template)"""
+    m = A.parts['head']
+    if len(m.V) != len(REG['vertex']) or not len(ids):
+        return []
+    v = np.asarray(REG['vertex'])[ids]
+    cnt = np.bincount(v, minlength=len(REG['names']))
+    return [REG['names'][k] for k in range(len(cnt)) if cnt[k] >= 0.1 * len(ids)]
+
+
 def apply(d):
     """d: {op, selection (id | 'draft' | None), params, feather}"""
     _init()
@@ -226,7 +243,23 @@ def apply(d):
         if not DRAFT.count():
             raise ValueError('the draft selection is empty')
         A.select('draft', 'head', Selection(A.parts['head'], DRAFT.mask), 'draft', float(d.get('feather', 0)))
+    import edit_log
+    import suggest
+    m = A.parts['head']
+    s = DRAFT if sel == 'draft' else A.sel[sel][0]
+    feather = float(d.get('feather', 0)) if sel == 'draft' else A.sel[sel][1]['feather']
+    w = s.weights(feather) if sel else np.ones(len(m.V))
+    ids = np.flatnonzero(w > 0)
+    area = {'count': int(len(ids)), 'centroid': [round(float(x), 4) for x in m.V[ids].mean(0)] if len(ids) else [0, 0, 0],
+            'bbox': [[round(float(x), 4) for x in m.V[ids].min(0)], [round(float(x), 4) for x in m.V[ids].max(0)]] if len(ids) else None,
+            'regions': _regions_of(ids)}
+    r0, _ = suggest.area_metrics(m.V, m.V, m.F, w)
+    V0 = m.V.copy()
     rec = A.apply(d['op'], 'head', sel, d.get('params'), by=d.get('by', 'user'))
+    r1, sh = suggest.area_metrics(V0, A.parts['head'].V, A.parts['head'].F, w)
+    _IDS.append(edit_log.record(rec['by'], d['op'], d.get('params') or {}, feather, area,
+                                {'before': {'roughness': round(r0, 5)}, 'after': {'roughness': round(r1, 5), 'shrink': round(sh, 4)}}, SESSION))
+    _REDO_IDS.clear()
     if sel == 'draft':
         rec['selection'] = 'draft'
         A.sel.pop('draft', None)
@@ -239,6 +272,13 @@ def history(action):
     _init()
     nxt = (A.log[-1] if A.log else None) if action == 'undo' else (A._redo[-1][2] if A._redo else None)
     r = A.undo() if action == 'undo' else A.redo()
+    import edit_log
+    if r and action == 'undo' and _IDS:
+        _REDO_IDS.append(_IDS.pop())
+        edit_log.verdict(_REDO_IDS[-1], 'undone')
+    elif r and action == 'redo' and _REDO_IDS:
+        _IDS.append(_REDO_IDS.pop())
+        edit_log.verdict(_IDS[-1], 'accepted')
     if (nxt and nxt['op'] == 'replace_part') or len(DRAFT.mask) != len(A.parts['head'].V):
         DRAFT = Selection(A.parts['head'])
     return {'ok': r}
