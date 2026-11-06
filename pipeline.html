@@ -1,0 +1,166 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Конвейер головы</title>
+<style>
+:root{--bg:#f4f5f7;--panel:#fff;--panel2:#f0f2f5;--fg:#1b2030;--mut:#566074;--line:#d5d9e1;--acc:#1d4ed8;--acc-fg:#fff;--acc-soft:#e3ebff;--ok:#166534;--okbg:#dcfce7;--warn:#92400e;--warnbg:#fef3c7;--err:#b91c1c;--errbg:#fee2e2;--r:8px;--s2:8px;--s3:16px;--shadow:0 4px 16px rgba(0,0,0,.18)}
+@media (prefers-color-scheme:dark){:root{--bg:#12151b;--panel:#1b2029;--panel2:#242a35;--fg:#e8eaef;--mut:#a3acbd;--line:#363e4c;--acc:#7aa7ff;--acc-fg:#0b1226;--acc-soft:#22324f;--ok:#6ee7a0;--okbg:#12301f;--warn:#fbbf6a;--warnbg:#33260e;--err:#ff8a8a;--errbg:#3a1717}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;grid-template-rows:48px 1fr;overflow:hidden}
+button,select,input{font:inherit;color:var(--fg)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.mut{color:var(--mut)}code{font:12px ui-monospace,monospace;background:var(--panel2);padding:1px 5px;border-radius:4px}
+.top{display:flex;align-items:center;gap:var(--s2);padding:0 var(--s3);background:var(--panel);border-bottom:1px solid var(--line)}
+.top h1{font-size:15px;font-weight:650;margin:0 var(--s3) 0 0}.top .sp{flex:1}
+.top a{color:var(--mut);text-decoration:none;padding:6px 8px;border-radius:6px}.top a:hover{background:var(--panel2);color:var(--fg)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:var(--panel2);font-size:13px}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--mut)}
+.pill.run i{background:var(--acc);animation:pulse 1s infinite}.pill.ok{background:var(--okbg);color:var(--ok)}.pill.ok i{background:var(--ok)}.pill.bad{background:var(--errbg);color:var(--err)}.pill.bad i{background:var(--err)}
+@keyframes pulse{50%{opacity:.25}}
+.btn{min-height:36px;padding:0 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn:hover:not(:disabled){background:var(--panel2)}.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--acc);color:var(--acc-fg);border-color:var(--acc);font-weight:600;min-height:44px}.btn.primary:hover:not(:disabled){filter:brightness(1.08);background:var(--acc)}
+.btn.danger{border-color:var(--err);color:var(--err)}
+.main{display:grid;grid-template-columns:300px minmax(0,1fr) 520px;min-height:0}
+.col{overflow-y:auto;overflow-x:hidden;padding:var(--s2);display:flex;flex-direction:column;gap:var(--s2);min-height:0}
+.left{border-right:1px solid var(--line);background:var(--bg)}.right{border-left:1px solid var(--line);background:var(--bg)}
+.sec{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px var(--s3);display:flex;flex-direction:column;gap:12px}
+.sec h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0;font-weight:650}
+.act{display:grid;grid-template-columns:1fr;gap:4px}.act .hint{font-size:12px;color:var(--mut);margin:0 0 8px}
+.steps{margin:0;padding-left:20px;font-size:13px;color:var(--mut)}
+.view{display:flex;flex-direction:column;min-width:0;min-height:0;padding:var(--s2);gap:var(--s2)}
+.vwrap{flex:1;min-height:0;display:flex;gap:var(--s2)}
+.vbox{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:var(--s2)}
+model-viewer{flex:1;min-height:200px;width:100%;background:#222733;border-radius:6px}
+.cmp{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:var(--s2);align-items:center}
+select,input[type=text],input[type=number]{min-height:36px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);width:100%}
+.tabs{position:sticky;top:0;z-index:2;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
+.tabs button{min-height:40px;border:0;background:none;cursor:pointer}.tabs button+button{border-left:1px solid var(--line)}
+.tabs button[aria-selected=true]{background:var(--acc-soft);font-weight:600}
+.panel{display:flex;flex-direction:column;gap:var(--s2)}
+table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px solid var(--line);padding:4px 4px;text-align:right}th{text-align:left;font-weight:600}
+td.bad{background:var(--errbg);color:var(--err);font-weight:600}
+.scroll{overflow:auto}
+.banner{padding:8px 12px;border-radius:var(--r);background:var(--warnbg);color:var(--warn);font-size:13px}
+.score{font-size:28px;font-weight:700;line-height:1}.score small{font-size:13px;color:var(--mut);font-weight:400}
+.opt{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;padding:8px 0;border-top:1px solid var(--line);align-items:center}
+.opt:first-child{border-top:0}.opt .d{grid-column:2;font-size:12px;color:var(--mut)}.opt input[type=number]{width:84px}.opt input[type=checkbox]{width:20px;height:20px}
+.opt label{font-weight:600}
+pre{margin:0;background:#12151b;color:#d7dce6;padding:12px;border-radius:var(--r);height:340px;overflow:auto;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap}
+img{max-width:100%;border:1px solid var(--line);border-radius:6px}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);max-width:640px;padding:var(--s3) 24px;box-shadow:var(--shadow)}dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog h2{margin-top:0}dialog li{margin:6px 0}
+#toasts{position:fixed;right:var(--s3);bottom:var(--s3);display:flex;flex-direction:column;gap:var(--s2);z-index:9}
+.toast{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:var(--r);padding:10px 14px;box-shadow:var(--shadow);max-width:360px}.toast.err{border-left-color:var(--err)}.toast.ok{border-left-color:var(--ok)}
+@media(max-width:1100px){body{overflow:auto;display:block}.main{display:flex;flex-direction:column}.left,.right{border:0}.view{height:60vh}pre{height:240px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style></head><body>
+<header class="top">
+ <h1>Конвейер головы</h1>
+ <span class="pill" id="pill"><i></i><span id="st">Ожидание</span></span>
+ <span class="sp"></span>
+ <button class="btn" onclick="$('help').showModal()">Как пользоваться</button>
+ <a href="/edit">Правка области</a><a href="/proto">Прототипы</a><a href="/">Главная</a>
+</header>
+<div class="main">
+ <aside class="col left" aria-label="Действия">
+  <section class="sec">
+   <h2>Сборка</h2>
+   <div class="act"><button class="btn primary" id="b-build" onclick="go('build')">Собрать голову</button><p class="hint">Строит модель с глазами и хвостом и сразу оценивает глаза и сетку. Минуты.</p></div>
+   <div class="act"><button class="btn" id="b-texture" onclick="go('texture')">Пересобрать текстуру</button><p class="hint">Цвет кожи, швы шеи, заливка LaMa. Долго; нужна, если меняли сглаживание под челюстью.</p></div>
+  </section>
+  <section class="sec">
+   <h2>Оценка готовой модели</h2>
+   <div class="act"><button class="btn" id="b-eyes" onclick="go('eyes')">Оценить глаза</button><p class="hint">Видны ли, раскрыты ли, нет ли складки.</p></div>
+   <div class="act"><button class="btn" id="b-mesh" onclick="go('mesh')">Оценить сетку</button><p class="hint">Осколки и растянутая текстура: щека, ухо, шея, челюсть.</p></div>
+   <div class="act"><button class="btn" id="b-status" onclick="go('status')">Проверить файлы шагов</button><p class="hint">Какие файлы есть и свежие ли. Ничего не меняет.</p></div>
+  </section>
+  <section class="sec">
+   <h2>В игру</h2>
+   <div class="fld"><label class="mut" for="mdl">Модель</label><select id="mdl"><option>hero1</option><option>hero</option></select></div>
+   <div class="act"><button class="btn danger" id="b-game" onclick="confirmGo('game')">Положить в игру…</button><p class="hint">Перезаписывает файлы игры выбранной модели и снимает рендеры.</p></div>
+   <div class="act"><button class="btn danger" id="b-all" onclick="confirmGo('all')">Всё сразу…</button><p class="hint">Сборка → в игру → рендер.</p></div>
+  </section>
+ </aside>
+ <section class="view" aria-label="Голова в 3D">
+  <div class="vwrap">
+   <div class="vbox"><model-viewer id="mv" camera-controls auto-rotate shading-intensity="1" exposure="1.1" alt="Голова"></model-viewer><div id="mvn" class="mut"></div></div>
+   <div class="vbox" id="b2" hidden><model-viewer id="mv2" camera-controls auto-rotate shading-intensity="1" exposure="1.1" alt="Голова для сравнения"></model-viewer><div id="mvn2" class="mut"></div></div>
+  </div>
+  <div class="cmp"><label class="mut" for="vs">Слева</label><select id="vs" onchange="showVar()"><option value="">текущая сборка</option></select><label class="mut" for="vs2">Справа</label><select id="vs2" onchange="showVar()"><option value="">— не сравнивать —</option></select></div>
+ </section>
+ <aside class="col right" aria-label="Результаты и настройки">
+  <div class="tabs" role="tablist">
+   <button role="tab" id="tb-res" aria-selected="true" onclick="tab('res')">Оценка</button>
+   <button role="tab" id="tb-opt" aria-selected="false" onclick="tab('opt')">Настройки</button>
+   <button role="tab" id="tb-var" aria-selected="false" onclick="tab('var')">Варианты</button>
+   <button role="tab" id="tb-log" aria-selected="false" onclick="tab('log')">Журнал</button>
+  </div>
+  <div class="panel" id="p-res">
+   <div class="sec"><h2>Глаза</h2><div id="sc" class="mut">Нет данных. Нажмите «Оценить глаза».</div><img id="im" hidden alt="Оценка глаз"></div>
+   <div class="sec"><h2>Сетка (профиль)</h2><img id="mi" hidden alt="Оценка сетки" onerror="this.hidden=true"><div class="mut" id="mi0">Нет данных. Нажмите «Оценить сетку».</div></div>
+  </div>
+  <div class="panel" id="p-opt" hidden>
+   <div class="sec"><div class="mut">Настройки лежат в <code>work/options.json</code>. «Сглаживание» меняет текстуру — после него «Пересобрать текстуру», потом «Собрать голову».</div>
+    <div id="opts"></div>
+    <div style="display:flex;gap:8px"><button class="btn primary" style="flex:1" onclick="saveOpts()">Сохранить настройки</button><button class="btn" onclick="resetOpts()">По умолчанию</button></div></div>
+  </div>
+  <div class="panel" id="p-var" hidden>
+   <div class="sec"><h2>Сохранить текущую сборку</h2><div style="display:flex;gap:8px"><input id="vn" type="text" placeholder="имя варианта, например «умолчания»" aria-label="Имя варианта"><button class="btn" onclick="saveVar()">Сохранить</button></div>
+    <div class="mut">Голова копируется вместе с настройками и оценками. Выберите два варианта над видом, чтобы сравнить.</div></div>
+   <div class="sec scroll"><h2>Варианты</h2><div id="vt" class="mut">Пока нет сохранённых вариантов.</div></div>
+  </div>
+  <div class="panel" id="p-log" hidden><pre id="lg" aria-live="off"></pre></div>
+ </aside>
+</div>
+<dialog id="help"><h2>Как пользоваться</h2>
+ <p>Панель собирает голову героя (hero / hero1) для игры и помогает подобрать настройки: глаза открыты, нет ям и растянутой текстуры.</p>
+ <ol><li>Настройте параметры (вкладка «Настройки») и сохраните.</li><li>Если меняли сглаживание под челюстью — «Пересобрать текстуру» (долго).</li><li>«Собрать голову» — строит модель и оценивает её.</li><li>Смотрите вкладку «Оценка»: числа от 0 до 100, чем больше, тем лучше; красные ячейки — вне нормы. Справа вид в 3D.</li><li>Сохраните вариант, поменяйте настройки, соберите снова и сравните два варианта рядом.</li><li>Когда устраивает — «Положить в игру» (перезаписывает файлы игры, будет запрос подтверждения).</li></ol>
+ <p class="mut">Если сомневаетесь — оставьте умолчания, соберите голову и сохраните вариант «умолчания» как точку отсчёта.</p>
+ <form method="dialog"><button class="btn primary" style="min-height:36px">Понятно</button></form></dialog>
+<dialog id="ask"><h2 id="ask-t"></h2><p id="ask-p"></p><form method="dialog" style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" value="no">Отмена</button><button class="btn danger" value="yes" id="ask-y">Продолжить</button></form></dialog>
+<div id="toasts" aria-live="polite"></div>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js" crossorigin="anonymous"></script>
+<script>
+const $=i=>document.getElementById(i);let glbT=0,OPT=null;
+function toast(t,k){const e=document.createElement('div');e.className='toast '+(k||'');e.textContent=t;$('toasts').append(e);setTimeout(()=>e.remove(),k=='err'?7000:3500)}
+function tab(n){for(const k of['res','opt','var','log']){$('p-'+k).hidden=k!=n;$('tb-'+k).setAttribute('aria-selected',k==n)}}
+const NAMES={build:'Сборка головы',texture:'Текстура',eyes:'Оценка глаз',mesh:'Оценка сетки',status:'Проверка файлов',game:'Перенос в игру',all:'Сборка, перенос и рендер'};
+async function go(s){const r=await (await fetch('/api/run',{method:'POST',body:JSON.stringify({step:s,model:$('mdl').value})})).json();if(r.error){toast(r.error,'err');return}toast('Запущено: '+NAMES[s]);if(s=='build'||s=='all'||s=='texture')tab('log');poll()}
+function confirmGo(s){const d=$('ask');$('ask-t').textContent=s=='game'?'Положить голову в игру?':'Собрать, положить в игру и отрисовать?';
+ $('ask-p').textContent='Файлы игры модели «'+$('mdl').value+'» будут перезаписаны. Вернуть их можно только из истории git игры.';
+ d.onclose=()=>{if(d.returnValue=='yes')go(s);d.returnValue=''};d.showModal()}
+function table(e){const ks=['visible','through','aperture','picture','iris','back','step','shade','depth','gaps','blocky'];
+const T={visible:[.9,1e9],through:[-1,.03],aperture:[.27,.45],picture:[.5,1e9],back:[-1,0],step:[-1,.006],shade:[-1,25],depth:[-1,.04],gaps:[-1,0],blocky:[-1,.6]};
+const D={visible:'видимая доля заплатки глаза (меньше 0.9 — глаз закрыт кожей)',through:'доля пикселей глаза, где виден фон (дыра)',aperture:'высота/ширина раскрытого глаза (норма 0.27–0.45)',picture:'доля не-кожи в глазу (белок, радужка)',iris:'тёмные пиксели радужки и зрачка',back:'вывернутые грани под глазом',step:'ступенька глубины под глазом (складка)',shade:'скачок яркости под глазом (дуга, пятно)',depth:'глубина ямки щеки под глазом',gaps:'дыры в голове рядом с глазом',blocky:'доля одинаковых соседних пикселей щеки (увеличенная текстура)'};
+let bad=0;const vs=Object.keys(e.views);
+const rows=ks.map(k=>'<tr><th title="'+D[k]+'">'+k+'</th>'+vs.map(v=>{const x=e.views[v][k],t=T[k];const b=t&&(x<t[0]||x>t[1]);if(b)bad++;return '<td class="'+(b?'bad':'')+'">'+(+x).toFixed(3)+'</td>'}).join('')+'</tr>').join('');
+return '<div class="score">'+Math.round(e.score)+'<small> / 100 · '+(bad?bad+' показателей вне нормы':'всё в норме')+'</small></div><table><tr><th>показатель</th>'+vs.map(v=>'<td><b>'+v+'</b></td>').join('')+'</tr>'+rows+'</table><div class="mut" style="font-size:12px">Наведите на название показателя — будет пояснение. Красное — вне нормы.</div>'}
+async function loadOpts(){OPT=await (await fetch('/api/options')).json();let h='';
+for(const o of OPT.schema){const v=OPT.values[o.name];const inp=o.kind=='bool'?'<input type="checkbox" id="o_'+o.name+'" '+(v?'checked':'')+'>':'<input type="number" id="o_'+o.name+'" value="'+v+'" min="'+o.min+'" max="'+o.max+'" step="'+o.step+'">';
+h+='<div class="opt">'+inp+'<label for="o_'+o.name+'">'+o.label+'</label><div class="d">'+o.desc+(o.default!==undefined?' По умолчанию: '+(o.kind=='bool'?(o.default?'да':'нет'):o.default)+'.':'')+'</div></div>'}
+$('opts').innerHTML=h}
+function collect(){const r={};for(const o of OPT.schema){const e=$('o_'+o.name);r[o.name]=o.kind=='bool'?e.checked:+e.value}return r}
+async function saveOpts(){await fetch('/api/options',{method:'POST',body:JSON.stringify(collect())});toast('Настройки сохранены','ok')}
+async function resetOpts(){await fetch('/api/options',{method:'POST',body:JSON.stringify({reset:1})});await loadOpts();toast('Возвращены значения по умолчанию')}
+async function saveVar(){if(!$('vn').value.trim()){toast('Введите имя варианта','err');return}await saveOpts();const r=await (await fetch('/api/variant',{method:'POST',body:JSON.stringify({name:$('vn').value})})).json();if(r.error)toast(r.error,'err');else{$('vn').value='';toast('Вариант сохранён','ok');poll()}}
+function showVar(){const v=$('vs').value,w=$('vs2').value;const u=x=>'/api/file?f='+(x?'work/variants/'+x+'.glb':'work/hero1_eye.glb')+'&t='+Date.now();
+$('mv').src=u(v);$('mvn').textContent=v||'текущая сборка';$('b2').hidden=!w;if(w){$('mv2').src=u(w);$('mvn2').textContent=w}}
+const BTN=['b-build','b-texture','b-eyes','b-mesh','b-status','b-game','b-all'];
+async function poll(){const s=await (await fetch('/api/run')).json();
+const p=$('pill');p.className='pill '+(s.running?'run':(s.rc==null?'':(s.rc==0?'ok':'bad')));
+$('st').textContent=s.running?('Идёт: '+(NAMES[s.running]||s.running)+'…'):(s.rc==null?'Ожидание':(s.rc==0?'Готово':'Ошибка, код '+s.rc));
+for(const b of BTN)$(b).disabled=!!s.running;
+if(window.wasRun&&!s.running)toast(s.rc==0?'Готово':'Завершилось с ошибкой (код '+s.rc+') — см. «Журнал»',s.rc==0?'ok':'err');window.wasRun=!!s.running;
+$('lg').textContent=s.lines.join('\n')||'Журнал пуст.';$('lg').scrollTop=1e9;
+if(s.eyes){$('sc').innerHTML=(s.eyes_stale?'<div class="banner" id="stale">⚠ Оценка устарела: '+s.eyes_stale+'. Нажмите «Оценить глаза».</div>':'')+table(s.eyes)}
+if(s.has_png){$('im').hidden=false;$('im').src='/api/img?p=work/eye_score.png&t='+(s.eyes?Math.round(s.eyes.score*1000):0)}
+if(!s.running&&s.rc===0&&window.mT!=s.lines.length){window.mT=s.lines.length;$('mi').hidden=false;$('mi0').hidden=true;$('mi').src='/api/img?p=work/mesh_score.png&t='+Date.now()}
+if(s.variants)vars(s.variants);
+if(s.glb&&!s.running&&!$('vs').value){const t=s.rc+'|'+s.lines.length;if(t!=glbT){glbT=t;$('mv').src='/api/file?f='+s.glb+'&t='+Date.now();$('mvn').textContent='текущая сборка'}}}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function vars(l){const names=l.map(x=>x.name).join();if(window.vN===names)return;window.vN=names;const sc=x=>x==null?'—':Math.round(x);
+for(const [id,first] of [['vs','текущая сборка'],['vs2','— не сравнивать —']]){const s=$(id),cur=s.value;s.innerHTML='<option value="">'+first+'</option>'+l.map(x=>'<option value="'+esc(x.name)+'">'+esc(x.name)+' (глаза '+sc(x.eye)+', сетка '+sc(x.mesh)+')</option>').join('');s.value=cur}
+$('vt').innerHTML=l.length?'<table><tr><th>вариант</th><td>глаза</td><td>сетка</td></tr>'+l.map(x=>'<tr><th>'+esc(x.name)+'<div class="mut" style="font-weight:400">'+(Object.keys(x.options||{}).filter(k=>OPT&&OPT.schema.some(o=>o.name==k&&o.default!==x.options[k])).map(k=>esc(k)+'='+esc(x.options[k])).join(', ')||'настройки по умолчанию')+'</div></th><td>'+sc(x.eye)+'</td><td>'+sc(x.mesh)+'</td></tr>').join('')+'</table>':'Пока нет сохранённых вариантов.'}
+addEventListener('error',e=>toast('Ошибка скрипта: '+e.message,'err'));
+setInterval(poll,2000);loadOpts();poll()
+</script></body></html>
