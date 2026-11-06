@@ -169,11 +169,11 @@ async function load(){const m=await (await fetch('/api/edit/mesh')).json();
 function paint(ids){for(let i=0;i<col.length;i+=3){const b=i/3>=NH&&NH>0;col[i]=b?.55:.85;col[i+1]=b?.6:.7;col[i+2]=b?.7:.6}
  for(const v of ids){col[v*3]=.15;col[v*3+1]=.55;col[v*3+2]=1}geo.attributes.color.needsUpdate=true;nsel=ids.length;sync()}
 function res(r){if(r.error){toast(r.error,'err');return}if(r.vertices)paint(r.vertices)}
-const act=a=>post('select',{action:a,steps:2}).then(res);
+const act=a=>post('select',{action:a,steps:2}).then(r=>{res(r);if(a=='clear'&&!r.error)toast('Выделение снято')});
 const byRegion=()=>{const v=$('rg').value;if(v)post('select',{action:'region',name:v,mode}).then(res)};
 const mb=()=>{ctl.mouseButtons.LEFT=sel?-1:THREE.MOUSE.ROTATE;ctl.mouseButtons.RIGHT=sel?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN};
-addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.ctrlKey||e.metaKey)return;const k=e.key.toLowerCase();
- if(k=='b')setTool('brush');else if(k=='x')setTool('box');else if(k=='r')setTool('orbit');else if(k=='z')hist(e.shiftKey?'redo':'undo');else if(e.key=='Escape')act('clear')});
+addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.ctrlKey||e.metaKey)return;const k=e.code;/* физические клавиши: работают и в русской раскладке */
+ if(k=='KeyB')setTool('brush');else if(k=='KeyX')setTool('box');else if(k=='KeyR')setTool('orbit');else if(k=='KeyZ')hist(e.shiftKey?'redo':'undo');else if(k=='KeyY')hist('redo');else if(k=='Escape')act('clear')});
 let down=false;const ray=new THREE.Raycaster(),mv=new THREE.Vector2();
 function hit(e){const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,C);const h=ray.intersectObject(mesh)[0];
  if(!h||h.faceIndex>=NF)return;pending={action:'brush',point:[h.point.x,h.point.y,h.point.z],radius:+$('rs').value*(window.RAD||1)*0.2,mode};flush()}
@@ -202,7 +202,7 @@ async function toggleBefore(){if(showB){await reloadMesh(false);return}
  const r=await (await fetch('/api/edit/before')).json();if(r.none){toast('Пока нечего сравнивать: правок нет');return}
  await reloadMesh(false,'/api/edit/before');showB=true;$('bb').classList.add('on');$('bb').textContent='Вернуть «после»';
  $('info').innerHTML='<b>«ДО»</b> последней правки ('+r.op+')'+(r.max_move!=null?', сдвиг до '+r.max_move.toFixed(3):', форма сетки изменилась');$('empty').hidden=true}
-async function hist(a){await post(a);await reloadMesh(true);refresh()}
+async function hist(a){const r=await post(a);await reloadMesh(true);refresh();toast(r&&r.error?r.error:(a=='undo'?'Отменено':'Возвращено'),r&&r.error?'err':'')}
 async function reloadMesh(fit,url){showB=false;$('bb').classList.remove('on');$('bb').textContent='Показать «до»';const m=await (await fetch(url||'/api/edit/mesh')).json();NH=m.nhead;NF=m.nfhead;
  S.remove(mesh);geo.dispose();geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));mesh.geometry=geo;S.add(mesh);
  geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true)}
