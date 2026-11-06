@@ -1,0 +1,115 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Прототипы редактора моделей</title>
+<style>
+:root{--bg:#f4f5f7;--pn:#fff;--fg:#1d2330;--mu:#667085;--ln:#d6dae1;--ac:#2563eb;--ok:#15803d;--bad:#b91c1c;--wn:#b45309}
+@media(prefers-color-scheme:dark){:root{--bg:#14171c;--pn:#1d2128;--fg:#e6e8ec;--mu:#9aa3b2;--ln:#343b47;--ac:#6ea0ff;--ok:#4ade80;--bad:#f87171;--wn:#fbbf24}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}
+header{padding:10px 16px;border-bottom:1px solid var(--ln);background:var(--pn)}h1{font-size:17px;margin:0 0 6px}
+nav{display:flex;gap:6px;flex-wrap:wrap}nav button{border:1px solid var(--ln);background:var(--pn);color:var(--fg);padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit}
+nav button.on{background:var(--ac);border-color:var(--ac);color:#fff}
+main{padding:12px 16px;max-width:1280px;margin:auto}section{display:none}section.on{display:block}
+.how{background:var(--pn);border:1px solid var(--ln);border-left:4px solid var(--ac);border-radius:6px;padding:8px 14px;margin-bottom:12px}
+.how h3{margin:2px 0 4px;font-size:14px}.how ol{margin:4px 0;padding-left:20px}.mu{color:var(--mu);font-size:12px}
+.ws{display:grid;grid-template-columns:200px minmax(260px,1fr) 300px;gap:10px}
+@media(max-width:900px){.ws{grid-template-columns:1fr}}
+.pn{background:var(--pn);border:1px solid var(--ln);border-radius:6px;padding:10px}.pn h4{margin:0 0 6px;font-size:13px}
+model-viewer{width:100%;height:340px;background:var(--bg);border-radius:4px}
+.tree div{padding:4px 6px;border-radius:4px;cursor:pointer}.tree div.on{background:var(--ac);color:#fff}.tree .l{padding-left:18px}
+.card{border:1px solid var(--ln);border-radius:6px;padding:8px;margin-bottom:8px}.card b{display:block}
+.card .d{font-size:12px;color:var(--mu)}.btn{border:1px solid var(--ln);background:var(--pn);color:var(--fg);border-radius:5px;padding:4px 9px;cursor:pointer;font:inherit;margin:4px 4px 0 0}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}.btn.no{color:var(--bad)}.pill{display:inline-block;border-radius:10px;padding:0 7px;font-size:12px;border:1px solid var(--ln)}
+.up{color:var(--ok)}.dn{color:var(--bad)}.tl{display:flex;gap:6px;overflow:auto;margin-top:8px}.tl span{white-space:nowrap;border:1px solid var(--ln);border-radius:12px;padding:2px 9px;font-size:12px;background:var(--pn)}
+.tl .u{border-color:var(--ac)}.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+input[type=range]{width:100%}.lab{display:flex;justify-content:space-between;font-size:12px}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--ln);padding:4px 6px;text-align:left;font-size:13px}
+.steps{list-style:none;padding:0}.steps li{padding:3px 0}.steps li:before{content:"○ "}.steps li.done:before{content:"✓ "}.steps li.done{color:var(--ok)}.bar{height:8px;background:var(--ln);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac)}
+.tag{position:absolute;background:var(--ac);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px}
+</style></head><body>
+<header><h1>Прототипы редактора 3D-моделей <span class=mu>— не рабочий код: данные выдуманные, цель — согласовать, как оно будет работать</span></h1>
+<nav id=nav></nav></header><main>
+
+<section id=p1><div class=how><h3>П1. Рабочая область — как это работает</h3><ol>
+<li>Слева части модели (дерево). Клик выбирает часть: ассистент и инструменты работают только с ней.</li>
+<li>Вы пишете цель обычным текстом: «убрать яму под левым глазом, не менять форму носа».</li>
+<li>Ассистент предлагает правки карточками: что сделает, какой инструмент, как изменятся оценки. Ничего не применяется само.</li>
+<li>[Принять] — правка попадает в ленту внизу и в журнал, [Отклонить] — идёт в обучение как «не то». Любую правку можно отменить.</li></ol></div>
+<div class=ws>
+<div class="pn tree"><h4>Части</h4><div class=on onclick="pick(this)">▾ Персонаж hero1</div><div class=l onclick="pick(this)">голова</div><div class=l onclick="pick(this)">туловище</div><div class=l onclick="pick(this)">руки</div><div class=l onclick="pick(this)">ноги</div><div class=l onclick="pick(this)">хвост</div>
+<p class=mu>🔒 заблокированное ассистент не трогает</p></div>
+<div class=pn><model-viewer camera-controls auto-rotate shading-intensity=1 exposure=1.1 src="/api/file?f=work/hero1_eye.glb"></model-viewer>
+<div class=mu>Выбрано: <b id=sel>Персонаж hero1</b> · режим: <select><option>предложи</option><option>сам</option><option>только вручную</option></select></div></div>
+<div class=pn><h4>Ассистент</h4><input style="width:100%" value="убрать яму под левым глазом, форму носа не менять">
+<div id=cards style="margin-top:8px"></div></div></div>
+<div class=tl id=tl><span>импорт</span><span class=u>замена головы</span><span>цвет шеи</span></div></section>
+
+<section id=p2><div class=how><h3>П2. Область и инструмент</h3><ol>
+<li>Кистью или кликом отметьте область на модели (маска). Можно «добавить» и «вычесть».</li>
+<li>Выберите инструмент из списка, подходящего к части: для кожи — заливка и размытие, для сетки — заполнение ям.</li>
+<li>Двигайте параметры: превью в низком качестве обновляется сразу, оценка «до → после» видна рядом.</li>
+<li>Ограничения: «не трогать» (части и маски) и «макс. смещение вершин». Применение — отдельной кнопкой.</li></ol></div>
+<div class=row2><div class=pn><model-viewer camera-controls shading-intensity=1 exposure=1.1 camera-orbit="0deg 80deg 1.2m" src="/api/file?f=work/hero1_eye.glb"></model-viewer><div class=mu>В рабочей версии маска рисуется красным поверх модели (здесь не показана)</div></div>
+<div class=pn><h4>Инструмент: Заполнить яму</h4>
+<div class=lab><span>Колец вокруг ямы</span><b id=v1>6</b></div><input type=range min=2 max=12 value=6 oninput="v1.textContent=this.value;sc()">
+<div class=lab><span>Предел сдвига UV</span><b id=v2>0.15</b></div><input type=range min=3 max=50 value=15 oninput="v2.textContent=(this.value/100).toFixed(2);sc()">
+<div class=lab><span>Макс. смещение вершин, мм</span><b id=v3>2</b></div><input type=range min=0 max=10 value=2 oninput="v3.textContent=this.value;sc()">
+<p>Оценка глаз: <b>65</b> → <b id=sc2 class=up>75</b> · Оценка сетки: <b>75</b> → <b>75</b></p>
+<label><input type=checkbox checked> не трогать нос и рот</label><br><button class="btn ok">Применить</button><button class=btn>Сбросить</button></div></div></section>
+
+<section id=p3><div class=how><h3>П3. Сравнение A / B</h3><ol>
+<li>Две версии рядом, камеры связаны: вращаете одну — вращается вторая.</li>
+<li>Нажмите «A лучше», «B лучше» или «оба плохи», при желании укажите причину.</li>
+<li>Каждое нажатие — пара предпочтений. Из них учится модель награды, и ассистент начинает предлагать то, что вам нравится.</li>
+<li>Счётчик показывает, сколько пар уже собрано, чтобы было видно, когда обучение имеет смысл.</li></ol></div>
+<div class=row2><div class=pn><b>A · умолчания</b> <span class=pill>глаза 75 · сетка 75</span><model-viewer id=ma camera-controls shading-intensity=1 exposure=1.1 src="/api/file?f=work/hero1_eye.glb"></model-viewer></div>
+<div class=pn><b>B · сглаживание 4.0</b> <span class=pill>глаза 75 · сетка 80</span><model-viewer id=mb camera-controls shading-intensity=1 exposure=1.1 src="/api/file?f=work/hero1_head2.glb"></model-viewer></div></div>
+<div class=pn style="margin-top:8px"><button class="btn ok" onclick="pair('A')">A лучше</button><button class="btn ok" onclick="pair('B')">B лучше</button><button class="btn no" onclick="pair('0')">оба плохи</button>
+<select><option>причина…</option><option>глаза</option><option>шея</option><option>текстура</option><option>форма</option></select> <span id=pc class=mu>собрано пар: 12</span></div></section>
+
+<section id=p4><div class=how><h3>П4. Ручная правка и «учить»</h3><ol>
+<li>Вручную двигаете вершины, красите текстуру, меняете параметры любого инструмента.</li>
+<li>Переключатель «учиться на этой правке» включён — снимок до/после, область и параметры пишутся в датасет.</li>
+<li>Справа список «что ассистент усвоил»: каждое правило можно посмотреть, отключить или удалить, если оно ошибочное.</li>
+<li>Выключили переключатель — правка остаётся в модели, но в обучение не идёт.</li></ol></div>
+<div class=row2><div class=pn><h4>Ручные инструменты</h4><button class=btn>Двигать вершины</button><button class=btn>Кисть текстуры</button><button class=btn>Сгладить</button><button class=btn>Сдвинуть UV</button>
+<p><label><input type=checkbox checked onchange="lr.style.opacity=this.checked?1:.4"> учиться на этой правке</label></p>
+<p class=mu>Сейчас записано правок в этой сессии: 3 (кисть ×2, двигать ×1)</p></div>
+<div class=pn id=lr><h4>Что ассистент усвоил</h4><table><tr><th>правило</th><th>сколько раз</th><th></th></tr>
+<tr><td>Под глазом всегда сначала «Заполнить яму», потом «Размыть плиту»</td><td>7</td><td><button class=btn>выкл.</button></td></tr>
+<tr><td>Кожу шеи сглаживать сильнее, чем щёки</td><td>4</td><td><button class=btn>выкл.</button></td></tr>
+<tr><td>Не трогать брови</td><td>9</td><td><button class=btn>выкл.</button></td></tr></table></div></div></section>
+
+<section id=p5><div class=how><h3>П5. Замена части — главный сценарий</h3><ol>
+<li>У каждой части есть «розетки» (sockets): кольцо вершин и своя система координат. Шея тела и шея головы — совместимые розетки.</li>
+<li>Выберите часть-донор (голова из другой модели, сгенерированная, из библиотеки) и перетащите на розетку тела. Один жест.</li>
+<li>Сервис сам: выравнивает по розетке, масштабирует по кольцу, сшивает шов, подгоняет цвет кожи, переносит веса скелета.</li>
+<li>Проверка критиками (шов, масштаб, дыры) — предупреждения видны сразу; [Принять] кладёт операцию «замена части» в журнал, её можно отменить.</li></ol></div>
+<div class=ws><div class=pn><h4>Библиотека частей</h4><div class=card><b>голова · scan_head_07</b><span class=d>розетка: шея ⌀ 11 см</span></div><div class=card><b>голова · hero1</b><span class=d>розетка: шея ⌀ 11 см</span></div><div class=card><b>рука · pirate_arm</b><span class=d>розетка: плечо</span></div><p class=mu>Перетащите карточку на модель ↦</p></div>
+<div class=pn><model-viewer camera-controls auto-rotate shading-intensity=1 exposure=1.1 src="/api/file?f=work/hero1_eye.glb"></model-viewer><div class=mu>Розетка «шея» подсвечена; донор висит над ней</div></div>
+<div class=pn><h4>Заменить: голова → scan_head_07</h4><ul class=steps id=rs><li>выровнять по розетке «шея»</li><li>масштаб по кольцу (×0.96)</li><li>сшить шов (bridge, 24 ребра)</li><li>подогнать цвет кожи шеи</li><li>перенести веса скелета</li><li>проверка критиков</li></ul>
+<div class=bar><i id=rb style="width:0"></i></div><p id=rw class=mu>Нажмите «Показать».</p><button class=btn onclick="runRep()">Показать</button><button class="btn ok">Принять</button><button class="btn no">Отмена</button></div></div></section>
+
+<section id=p6><div class=how><h3>П6. Обучение и версии ассистента</h3><ol>
+<li>Видно, сколько данных собрано: ручные правки, пары A/B, принятые и отклонённые предложения.</li>
+<li>Обучение идёт локально на видеокарте (Windows-машина), кнопка запускает его в фоне, есть прогресс.</li>
+<li>Новая версия ассистента сравнивается со старой на отложенных моделях: по оценкам и по вашему выбору A/B.</li>
+<li>Выпускается, только если лучше. Откат на прежнюю версию — одна кнопка.</li></ol></div>
+<div class=row2><div class=pn><h4>Данные</h4><table><tr><td>ручные правки</td><td>38</td></tr><tr><td>пары A/B</td><td>12 <span class=mu>(нужно ≥ 50)</span></td></tr><tr><td>принято / отклонено</td><td>41 / 17</td></tr><tr><td>модели в отложенной выборке</td><td>3</td></tr></table></div>
+<div class=pn><h4>Версии</h4><table><tr><th>версия</th><th>глаза</th><th>сетка</th><th>вам нравится</th></tr><tr><td>v0 без обучения</td><td>65</td><td>70</td><td>—</td></tr><tr><td><b>v1 (текущая)</b></td><td>75</td><td>75</td><td>58%</td></tr><tr><td>v2 (обучается)</td><td colspan=3><div class=bar><i style="width:62%"></i></div></td></tr></table>
+<button class=btn>Обучить v2</button><button class="btn no">Откатить на v0</button></div></div></section>
+</main>
+<script type=module src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<script>
+const $=id=>document.getElementById(id),T=[['p1','П1 Рабочая область'],['p2','П2 Область и инструмент'],['p3','П3 Сравнение A/B'],['p4','П4 Ручная правка'],['p5','П5 Замена части'],['p6','П6 Обучение']];
+$('nav').innerHTML=T.map(t=>'<button data-t='+t[0]+'>'+t[1]+'</button>').join('');
+function show(id){for(const[i]of T){$(i).classList.toggle('on',i==id)}document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==id));try{location.hash=id}catch(e){}}
+$('nav').onclick=e=>{if(e.target.dataset.t)show(e.target.dataset.t)};show((location.hash||'#p1').slice(1));
+const C=[['Заполнить яму под левым глазом','fill_hole · 6 колец','глаза 65 → 75','up'],['Перекрасить плиту под глазом','texture_inpaint · размытие 3.0','сетка 75 → 75','mu'],['Сгладить кожу под челюстью','texture_blur · σ 2.2','глаза 75 → 75','mu']];
+function cards(){$('cards').innerHTML=C.map((c,i)=>'<div class=card id=c'+i+'><b>'+c[0]+'</b><span class=d>'+c[1]+'</span><br><span class='+c[3]+'>'+c[2]+'</span><br><button class="btn ok" onclick="acc('+i+')">Принять</button><button class="btn no" onclick="rej('+i+')">Отклонить</button><button class=btn>Подправить</button></div>').join('')}
+function acc(i){$('c'+i).style.opacity=.5;$('c'+i).querySelector('.d').textContent='принято — в ленте';$('tl').insertAdjacentHTML('beforeend','<span class=u>'+C[i][0]+'</span>')}
+function rej(i){$('c'+i).style.opacity=.35;$('c'+i).querySelector('.d').textContent='отклонено — учтено в обучении'}
+function pick(el){document.querySelectorAll('.tree div').forEach(d=>d.classList.remove('on'));el.classList.add('on');$('sel').textContent=el.textContent.replace('▾ ','')}
+function sc(){$('sc2').textContent=Math.round(65+10*(1-Math.abs(v1.textContent-6)/10-Math.abs(v2.textContent-.15))).toString()}
+let n=12;function pair(x){n++;$('pc').textContent='собрано пар: '+n+' · записано: '+(x=='0'?'оба плохи':x+' лучше')}
+function runRep(){const li=[...document.querySelectorAll('#rs li')];li.forEach(l=>l.className='');let k=0;const t=setInterval(()=>{if(k<li.length){li[k].className='done';$('rb').style.width=((k+1)/li.length*100)+'%';k++}else{clearInterval(t);$('rw').innerHTML='Готово. Предупреждение: шов на шее светлее на 4 L — <b>цвет подогнан</b>. Критики: шов ✓ масштаб ✓ дыры ✓'}},500)}
+cards();
+{const a=$('ma'),b=$('mb');let lock=0;const link=(x,y)=>x.addEventListener('camera-change',e=>{if(e.detail.source!=='user-interaction'||lock)return;lock=1;y.cameraOrbit=x.getCameraOrbit().toString();y.fieldOfView=x.getFieldOfView()+'deg';lock=0});link(a,b);link(b,a)}
+</script></body></html>

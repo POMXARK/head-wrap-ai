@@ -187,6 +187,8 @@ class H(BaseHTTPRequestHandler):
             self.send(load())
         elif path == '/api/log':
             self.send(LOG)
+        elif path == '/proto':  # clickable prototypes of the editor (static, explained)
+            self.send(open(os.path.join(HERE, 'proto', 'index.html'), encoding='utf-8').read(), 'text/html')
         elif path == '/pipeline':
             import pipeline
             self.send(pipeline.PAGE, 'text/html')

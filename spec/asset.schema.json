@@ -1,0 +1,38 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "asset.schema.json",
+ "title": "Asset: model as parts with sockets",
+ "type": "object",
+ "required": ["id", "category", "source", "parts", "outputs"],
+ "properties": {
+  "id": {"type": "string"},
+  "category": {"enum": ["head", "torso", "arm", "leg", "character", "prop", "building", "tree"]},
+  "source": {"type": "object", "required": ["file", "format"],
+            "properties": {"file": {"type": "string"}, "format": {"enum": ["glb", "obj", "gm"]}, "unit": {"enum": ["m", "cm", "engine"]}}},
+  "skeleton": {"type": "object", "properties": {"bones": {"type": "array", "items": {"type": "string"}}}},
+  "parts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/part"}},
+  "outputs": {"type": "array", "minItems": 1, "items": {"enum": ["glb", "gm"]}, "uniqueItems": true},
+  "ops": {"type": "array", "items": {"$ref": "op.schema.json"}}
+ },
+ "$defs": {
+  "part": {"type": "object", "required": ["id", "kind", "mesh"],
+   "properties": {
+    "id": {"type": "string"},
+    "kind": {"type": "string", "description": "head|torso|hand|foot|wall|roof|door|trunk|crown|..."},
+    "mesh": {"type": "string", "description": "mesh name or vertex-set in the source file"},
+    "material": {"type": "string"},
+    "locked": {"type": "boolean", "description": "tools and the agent must not change it"},
+    "sockets": {"type": "array", "items": {"$ref": "#/$defs/socket"}},
+    "bones": {"type": "array", "items": {"type": "string"}}}},
+  "socket": {"type": "object", "required": ["name", "ring", "frame"],
+   "description": "an attachment place: a closed loop of vertices plus its local frame; two parts join when their sockets are compatible",
+   "properties": {
+    "name": {"type": "string"},
+    "accepts": {"type": "array", "items": {"type": "string"}, "description": "part kinds that may be attached here"},
+    "ring": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "description": "vertex ids of the boundary loop"},
+    "frame": {"type": "object", "required": ["origin", "up", "forward"],
+             "properties": {"origin": {"$ref": "#/$defs/v3"}, "up": {"$ref": "#/$defs/v3"}, "forward": {"$ref": "#/$defs/v3"}}},
+    "radius": {"type": "number", "exclusiveMinimum": 0}}},
+  "v3": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}
+ }
+}
