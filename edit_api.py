@@ -143,6 +143,17 @@ def mesh():
     return {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(h.V), 'nfhead': len(h.F)}
 
 
+def suggest_area(d):
+    """d: {selection: 'draft'|id, feather}: ranked smoothing proposals for the area; changes nothing"""
+    import suggest
+    _init()
+    sel = d.get('selection', 'draft')
+    s = DRAFT if sel == 'draft' else A.sel[sel][0]
+    feather = float(d.get('feather', 0)) if sel == 'draft' else A.sel[sel][1]['feather']
+    m = A.parts['head']
+    return suggest.suggest(m.V, m.F, s.weights(feather), int(d.get('top', 3)))
+
+
 def before():
     """the model as it was before the last op ('до'), in the format of mesh(); None if there is nothing to compare"""
     _init()

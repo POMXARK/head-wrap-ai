@@ -306,7 +306,7 @@ class H(BaseHTTPRequestHandler):
             try:
                 with edit_api.LOCK:
                     r = {'select': edit_api.select, 'save': edit_api.save_selection, 'apply': edit_api.apply, 'replace': edit_api.replace_head,
-                         'replace_job': edit_api.replace_job, 'cancel': lambda x: __import__('jobs').cancel(x['id']),
+                         'replace_job': edit_api.replace_job, 'suggest': edit_api.suggest_area, 'cancel': lambda x: __import__('jobs').cancel(x['id']),
                          'delete': lambda x: edit_api.delete_selection(x['id']) or {'ok': True},
                          'undo': lambda x: edit_api.history('undo'), 'redo': lambda x: edit_api.history('redo')}[k](d)
                 self.send(r)

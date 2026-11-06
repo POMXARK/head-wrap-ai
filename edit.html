@@ -31,10 +31,10 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%}
 <label>Итераций сглаживания: <b id="vi">5</b></label><input id="it" type="range" min="1" max="30" value="5" oninput="vi.textContent=this.value">
 <label>Смещение по Z (для «Сместить»): <b id="vz">0.1</b></label><input id="dz" type="range" min="-0.5" max="0.5" step="0.01" value="0.1" oninput="vz.textContent=this.value">
 <label>Растушёвка края: <b id="vf">0.2</b></label><input id="ft" type="range" min="0" max="1" step="0.05" value="0.2" oninput="vf.textContent=this.value">
-<div class="row"><button class="go" onclick="apply()">Применить в области</button><button id="bb" onclick="toggleBefore()">Показать «до»</button><button onclick="hist('undo')">Отменить</button><button onclick="hist('redo')">Вернуть</button></div>
+<div class="row"><button class="go" onclick="apply()">Применить в области</button><button onclick="suggest()">Посоветовать</button><button id="bb" onclick="toggleBefore()">Показать «до»</button><button onclick="hist('undo')">Отменить</button><button onclick="hist('redo')">Вернуть</button></div>
 <hr><b>Заменить голову</b> <span class="m">на манекене; голова встаёт на розетку «шея»</span>
 <div class="row"><select id="dn"></select><select id="sc"><option value="match_ring">масштаб по кольцу</option><option value="keep">не менять масштаб</option></select><button class="go" onclick="rep()">Заменить</button></div>
-<div id="prog" style="display:none"><div style="background:var(--line);border-radius:4px;height:10px"><div id="pb" style="background:var(--acc);height:10px;border-radius:4px;width:0"></div></div>
+<div id="sg"></div><div id="prog" style="display:none"><div style="background:var(--line);border-radius:4px;height:10px"><div id="pb" style="background:var(--acc);height:10px;border-radius:4px;width:0"></div></div>
 <div class="row"><span id="pm" class="m"></span><button id="pc" onclick="cancelJob()">Отмена</button></div></div>
 <div id="rrep" class="m"></div>
 <div id="log" class="m">Журнал правок пуст.</div>
@@ -84,8 +84,11 @@ function boxSel(x0,y0,x1,y1){const P=geo.attributes.position.array,N=geo.attribu
   v.project(C);const sx=(v.x+1)/2*w,sy=(1-v.y)/2*h;if(sx>=lx&&sx<=hx&&sy>=ly&&sy<=hy)ids.push(i)}
  post('select',{action:'ids',ids,mode}).then(res)}
 async function saveSel(){const r=await post('save',{name:$('nm').value,feather:+$('ft').value*(window.RAD||1)*0.2});refresh()}
-async function apply(){const op=$('op').value,params=op=='smooth'?{iterations:+$('it').value}:{vector:[0,0,+$('dz').value]};
- const r=await post('apply',{op,selection:'draft',params,feather:+$('ft').value*(window.RAD||1)*0.2});if(r.error){alert(r.error);return}await reloadMesh();refresh()}
+async function apply(){const op=$('op').value,params=op=='smooth'?{iterations:+$('it').value,...(window.LAM?{lam:window.LAM}:{})}:{vector:[0,0,+$('dz').value]};
+ const r=await post('apply',{op,selection:'draft',params,by:window.AG?'agent':'user',feather:+$('ft').value*(window.RAD||1)*0.2});window.AG=false;window.LAM=0;if(r.error){alert(r.error);return}await reloadMesh();refresh()}
+async function suggest(){const r=await post('suggest',{selection:'draft',feather:+$('ft').value*(window.RAD||1)*0.2});if(r.error){alert(r.error);return}
+ $('sg').innerHTML='<b>Совет помощника</b> <span class="m">(только предлагает)</span>'+r.proposals.map((p,i)=>'<div class="row">'+(i+1)+'. сгладить, итераций '+p.params.iterations+', сила '+p.params.lam+' — <span class="m">'+p.why+'</span><button onclick="takeSug('+p.params.iterations+','+p.params.lam+')">Взять</button></div>').join('')}
+function takeSug(it,lam){$('op').value='smooth';$('it').value=it;$('vi').textContent=it;window.LAM=lam;window.AG=true}
 let showB=false;
 async function toggleBefore(){if(showB){await reloadMesh(false);return}
  const r=await (await fetch('/api/edit/before')).json();if(r.none){alert('Пока нечего сравнивать: правок нет');return}
