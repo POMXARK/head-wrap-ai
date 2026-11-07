@@ -147,6 +147,8 @@ class H(BaseHTTPRequestHandler):
                                'uv_layout': edit_api.uv_layout, 'mesh_uv': edit_api.mesh_uv}[path.rsplit('/', 1)[1]]())
                 except ValueError as e:
                     self.send({'error': str(e)})
+                except FileNotFoundError as e:  # work/ is not in git: say what to copy, not a bare "Failed to fetch"
+                    self.send({'error': 'нет файла ' + os.path.relpath(e.filename or '?', HERE) + ': положите в папку work/ файлы baked.png, hero1_eye.glb, eye_open.json (см. README)'})
         elif path == '/api/edit/parts':
             import edit_api
             try:
