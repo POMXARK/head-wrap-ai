@@ -148,15 +148,9 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
    <div class="fld"><div class="lb"><span>Угол</span><b id="van">15°</b></div><input id="an" type="range" min="-90" max="90" step="5" value="15" oninput="van.textContent=this.value+'°'" aria-label="Угол поворота"></div>
    <button class="btn wide" id="bur" onclick="uvX('rotate')">Повернуть развёртку</button>
   </div></details>
-  <details class="sec" id="s-imp" hidden><summary>5. Импорт головы</summary><div class="bd">
-   <div class="help">Голова из выбранного источника встаёт на розетку «шея» манекена. Источник — шаблон, файл проекта, загруженный файл или модель игры.</div>
-   <div class="fld"><div class="lb"><span>Донор</span></div><select id="dn" aria-label="Донор" onchange="loadParts()"></select></div>
-   <div class="fld"><div class="lb"><span>Часть файла (голова)</span></div><select id="dpart" aria-label="Часть файла"></select></div>
-   <div class="fld"><div class="lb"><span>Масштаб</span></div><select id="sc" aria-label="Масштаб"><option value="match_ring">по кольцу шеи</option><option value="keep">не менять</option></select></div>
-   <button class="btn primary wide" id="brp" onclick="rep()">Импортировать голову</button>
-   <div id="prog" hidden><div class="prog"><i id="pb"></i></div><div class="grid2" style="grid-template-columns:1fr auto;align-items:center;margin-top:8px"><span id="pm" class="help"></span><button class="btn" id="pc" onclick="cancelJob()">Отмена</button></div></div>
-   <div id="rrep" class="box" hidden></div>
-   <div id="sg0"></div>
+  <details class="sec" id="s-imp"><summary>5. Импорт головы</summary><div class="bd">
+   <div class="help">Взять голову из другого файла или из модели игры и поставить её на шею манекена. Всё делается в одном окне.</div>
+   <button class="btn wide" onclick="$('dlg').showModal()">Импорт головы…</button>
   </div></details>
   <details class="sec" id="s-log"><summary>Журнал правок</summary><div class="bd"><ol id="log"><li class="mut">Пока пусто</li></ol></div></details>
  </aside>
@@ -166,8 +160,14 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
  <div><b>Экспорт</b><div class="help" id="xh" style="margin:4px 0 8px"></div>
   <label class="btn" style="justify-content:flex-start;margin-bottom:8px"><input type="checkbox" id="xb" onchange="xlinks()"> Вместе с манекеном (тело)</label>
   <div class="grid2"><a class="btn" id="x-glb" download>GLB (Blender, игра)</a><a class="btn" id="x-obj" download>OBJ</a><a class="btn" id="x-png" download>Текстура PNG</a><button class="btn" onclick="texExport()" title="Файлы work/head_edit.png и work/head_edit.obj на диске проекта">Сохранить в work/</button></div></div>
- <div><b>Импорт</b><div class="help" style="margin:4px 0 8px">Голова из файла встаёт на шею манекена так же, как донор в разделе «5. Импорт головы». Модели игры (.gm) переводятся в GLB конвертером игры.</div>
-  <div class="grid2" style="grid-template-columns:1fr"><label class="btn" style="cursor:pointer">Загрузить файл с компьютера (.glb, .gltf, .obj)<input type="file" id="ifile" accept=".glb,.gltf,.obj" hidden onchange="upload(this.files[0])"></label><button class="btn" onclick="$('dlg').close();$('s-imp').open=true;$('s-imp').scrollIntoView()">Выбрать из проекта или игры…</button></div></div>
+ <div><b>Импорт головы</b><div class="help" style="margin:4px 0 8px">Три шага: 1) выберите источник — файл с компьютера или модель из списка (проект, игра); 2) выберите часть с головой; 3) нажмите «Импортировать голову». Голова встанет на шею манекена; «Отменить» вернёт прежнюю.</div>
+  <label class="btn" style="cursor:pointer;margin-bottom:8px">Загрузить файл с компьютера (.glb, .gltf, .obj)<input type="file" id="ifile" accept=".glb,.gltf,.obj" hidden onchange="upload(this.files[0])"></label>
+  <div class="fld"><div class="lb"><span>1. Источник</span></div><select id="dn" aria-label="Источник" onchange="loadParts()"></select><div class="help" id="dnh"></div></div>
+  <div class="fld"><div class="lb"><span>2. Часть файла (голова)</span></div><select id="dpart" aria-label="Часть файла"></select></div>
+  <div class="fld"><div class="lb"><span>Масштаб</span></div><select id="sc" aria-label="Масштаб"><option value="match_ring">по кольцу шеи</option><option value="keep">не менять</option></select></div>
+  <button class="btn primary wide" id="brp" onclick="rep()">3. Импортировать голову</button>
+  <div id="prog" hidden><div class="prog"><i id="pb"></i></div><div class="grid2" style="grid-template-columns:1fr auto;align-items:center;margin-top:8px"><span id="pm" class="help"></span><button class="btn" id="pc" onclick="cancelJob()">Отмена</button></div></div>
+  <div id="rrep" class="box" hidden></div><div id="sg0"></div></div>
 </div></dialog>
 <div id="toasts" aria-live="polite"></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -272,7 +272,7 @@ async function rep(){const r=await post('replace_job',{donor:$('dn').value,part:
   if(j.status=='running'){await new Promise(r=>setTimeout(r,150));continue}
   JOB=null;$('brp').disabled=false;$('pc').hidden=true;if(j.status=='done')$('prog').hidden=true;
   if(j.status=='done'){const q=j.result.report;$('rrep').hidden=false;
-   $('rrep').textContent='Масштаб ×'+q.scale.toFixed(2)+', несовпадение кольца '+(q.ring_gap*100).toFixed(0)+'% радиуса'+(q.seam_stretch?', шов сшит полосой (длиннейшее ребро ×'+q.seam_stretch+' радиуса)':'');await reloadMesh(true);refresh();toast('Голова заменена','ok');setSt('Готово')}
+   $('rrep').textContent='Масштаб ×'+q.scale.toFixed(2)+', несовпадение кольца '+(q.ring_gap*100).toFixed(0)+'% радиуса'+(q.seam_stretch?', шов сшит полосой (длиннейшее ребро ×'+q.seam_stretch+' радиуса)':'');await reloadMesh(true);refresh();$('dlg').close();toast('Голова импортирована. Не нравится — «Отменить» в шапке','ok');setSt('Готово')}
   else if(j.status=='error'){toast(j.error,'err');setSt('Ошибка')}
   else{toast('Замена отменена');setSt('Отменено')}
   return}}
@@ -288,9 +288,9 @@ async function delSel(id){await post('delete',{id});refresh()}
 /* импорт и экспорт */
 function fillSrc(src,pick){const cur=pick||$('dn').value;$('dn').innerHTML=src.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.label)+'</option>').join('');if(cur&&src.some(x=>x.id==cur))$('dn').value=cur;if(!$('dpart').options.length||pick)loadParts()}
 async function loadParts(){const r=await (await fetch('/api/edit/parts?src='+encodeURIComponent($('dn').value))).json();if(r.error){toast(r.error,'err');$('dpart').innerHTML='';return}
- const big=r.parts.reduce((a,b)=>b.vertices>a.vertices?b:a,r.parts[0]);$('dpart').innerHTML=r.parts.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+' ('+p.vertices+' вершин)</option>').join('');$('dpart').value=big.name;$('dpart').disabled=r.parts.length<2}
+ const big=r.parts.reduce((a,b)=>b.vertices>a.vertices?b:a,r.parts[0]);$('dpart').innerHTML=r.parts.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+' ('+p.vertices+' вершин)</option>').join('');$('dpart').value=big.name;$('dpart').disabled=r.parts.length<2;$('dnh').textContent=r.parts.length+' част'+(r.parts.length==1?'ь':'ей')+' в файле; выбрана самая крупная'}
 async function upload(f){if(!f)return;if(f.size>64<<20){toast('Файл больше 64 МБ','err');return}const r=await (await fetch('/api/edit/upload?name='+encodeURIComponent(f.name),{method:'POST',body:f})).json();$('ifile').value='';
- if(r.error){toast(r.error,'err');return}const st=await (await fetch('/api/edit/state')).json();fillSrc(st.sources,r.id);$('dlg').close();$('s-imp').open=true;toast('Файл загружен. Выберите часть с головой и нажмите «Импортировать голову»','ok')}
+ if(r.error){toast(r.error,'err');return}const st=await (await fetch('/api/edit/state')).json();fillSrc(st.sources,r.id);toast('Файл загружен: выберите часть с головой и нажмите «Импортировать голову»','ok')}
 function xlinks(){const b=$('xb').checked?'&body=1':'';for(const f of['glb','obj','png'])$('x-'+f).href='/api/edit/export?fmt='+f+(f=='glb'?b:'');$('xh').textContent=TI.available?'Голова с текущими правками формы, текстуры и UV.':'Только форма головы: у неё нет UV и текстуры.'}
 $('dlg').addEventListener('toggle',xlinks);xlinks();
 /* текстура и UV */

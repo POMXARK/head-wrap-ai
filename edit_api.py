@@ -58,6 +58,20 @@ GAME_DIR = os.path.join(os.environ.get('W', os.path.dirname(HERE)), 'corsairs-re
 EXT = ('.glb', '.gltf', '.obj')
 
 
+def model_dirs():
+    """folders with ready GLB models of the game (corsairs-remake/chars_rig/models): HEADWRAP_MODELS (os.pathsep list) + usual places"""
+    c = [d for d in os.environ.get('HEADWRAP_MODELS', '').split(os.pathsep) if d]
+    for base in (os.path.dirname(HERE), os.path.expanduser('~'), 'C:\\', os.path.join(os.environ.get('W', ''), '')):
+        if base:
+            c.append(os.path.join(base, 'corsairs-remake', 'chars_rig', 'models'))
+    out = []
+    for d in c:
+        d = os.path.realpath(d)
+        if os.path.isdir(d) and d not in out:
+            out.append(d)
+    return out
+
+
 def sources():
     """what a head can be imported from: the template, model files of this folder (work/, models/), game models (.gm)"""
     import glob
@@ -66,6 +80,9 @@ def sources():
         for f in sorted(glob.glob(os.path.join(HERE, d, '*'))):
             if f.lower().endswith(EXT):
                 out.append({'id': 'file:' + os.path.relpath(f, HERE), 'label': os.path.relpath(f, HERE)})
+    for i, d in enumerate(model_dirs()):
+        for f in sorted(glob.glob(os.path.join(d, '*.glb'))):
+            out.append({'id': 'ext:%d:%s' % (i, os.path.basename(f)), 'label': 'игра: ' + os.path.basename(f)})
     for f in sorted(glob.glob(os.path.join(GAME_GM, '*.gm'))):
         n = os.path.basename(f)[:-3]
         out.append({'id': 'gm:' + n, 'label': 'из игры: %s.gm' % n})
@@ -98,6 +115,21 @@ def _resolve(name):
         return 'work/hero1_head2.glb'
     if name.startswith('gm:'):
         return _gm_to_glb(name[3:])
+    if name.startswith('ext:'):  # a game model from a model folder: copy into work/imported/ (the project reads only its own folder)
+        import re
+        import shutil
+        _, i, base = name.split(':', 2)
+        dirs = model_dirs()
+        if not i.isdigit() or int(i) >= len(dirs) or not re.fullmatch(r'[\w.-]+\.glb', base):
+            raise ValueError('нет такой модели: ' + name)
+        src = os.path.join(dirs[int(i)], base)
+        if not os.path.isfile(src):
+            raise ValueError('нет такой модели: ' + name)
+        rel = 'work/imported/' + base
+        os.makedirs(os.path.join(HERE, 'work', 'imported'), exist_ok=True)
+        if not os.path.exists(os.path.join(HERE, rel)):
+            shutil.copy(src, os.path.join(HERE, rel))
+        return rel
     if name.startswith('file:'):
         f = os.path.realpath(os.path.join(HERE, name[5:]))
         if not f.startswith(HERE + os.sep) or not f.lower().endswith(EXT) or not os.path.isfile(f):
