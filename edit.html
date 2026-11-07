@@ -94,6 +94,7 @@ body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
  <button class="btn" id="bb" onclick="toggleBefore()" title="Сравнить с состоянием до последней правки">Показать «до»</button>
  <span class="sep"></span>
  <div class="seg" id="vm" role="group" aria-label="Что показывать"><button id="v-mesh" aria-pressed="true" onclick="setView('mesh')">Сетка</button><button id="v-tex" aria-pressed="false" onclick="setView('tex')">Текстура</button><button id="v-uv" aria-pressed="false" onclick="setView('uv')">UV</button></div>
+ <div class="seg" id="msh" role="group" aria-label="Отображение модели"><button id="msh-solid" aria-pressed="true" onclick="setShade('solid')" title="Однотонная модель с подсветкой выделения">Сплошная</button><button id="msh-tex" aria-pressed="false" onclick="setShade('tex')" title="С текстурой">Текстура</button><button id="msh-wire" aria-pressed="false" onclick="setShade('wire')" title="Только рёбра сетки">Каркас</button></div><label class="btn" title="Рёбра сетки поверх модели"><input type="checkbox" id="mov" onchange="setShade()"> Рёбра</label>
  <span class="sp"></span>
  <button class="btn" onclick="frame(true)">К модели</button>
  <button class="btn" onclick="frame(false)">Весь вид</button>
@@ -162,16 +163,18 @@ body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
 <footer class="status"><span id="st">Готово</span><span class="sp" style="flex:1"></span><span>Вне выделения модель не меняется (проверяется тестами)</span></footer>
 <iframe id="mfr" title="Части модели и ремеш" hidden></iframe>
 <dialog id="dlg" aria-labelledby="dlgt"><div class="hd"><span id="dlgt">Файл: импорт и экспорт</span><button class="btn" aria-label="Закрыть" onclick="$('dlg').close()">✕</button></div><div class="bd">
+ <div><b>Предпросмотр</b>
+  <div class="prevbox" style="margin-top:6px"><canvas id="ppv" aria-label="Предпросмотр выбранной части или экспорта"></canvas><div class="pvmsg" id="ppm">Выберите часть в дереве или нажмите «Предпросмотр экспорта»</div></div>
+  <div class="row" style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><div class="seg" id="psh" role="group" aria-label="Отображение модели"><button id="psh-solid" aria-pressed="true" onclick="pvShade('solid')" title="Однотонная модель с подсветкой выделения">Сплошная</button><button id="psh-tex" aria-pressed="false" onclick="pvShade('tex')" title="С текстурой">Текстура</button><button id="psh-wire" aria-pressed="false" onclick="pvShade('wire')" title="Только рёбра сетки">Каркас</button></div><label class="btn"><input type="checkbox" id="pov" onchange="pvShade()"> Каркас поверх</label></div>
+  <div class="help" id="ppi"></div></div>
  <div><b>Экспорт</b><div class="help" id="xh" style="margin:4px 0 8px"></div>
   <label class="btn" style="justify-content:flex-start;margin-bottom:8px"><input type="checkbox" id="xb" onchange="xlinks()"> Вместе с манекеном (тело)</label>
-  <div class="grid2"><a class="btn" id="x-glb" download>GLB (Blender, игра)</a><a class="btn" id="x-obj" download>OBJ</a><a class="btn" id="x-png" download>Текстура PNG</a><button class="btn" onclick="texExport()" title="Файлы work/head_edit.png и work/head_edit.obj на диске проекта">Сохранить в work/</button></div></div>
+  <div class="grid2"><a class="btn" id="x-glb" download>GLB (Blender, игра)</a><a class="btn" id="x-obj" download>OBJ</a><a class="btn" id="x-png" download>Текстура PNG</a><button class="btn" onclick="previewPart('__current__',$('xb').checked?'body':'head')" title="Показать в окне предпросмотра то, что попадёт в файл GLB, с текстурой">Предпросмотр экспорта</button><button class="btn" onclick="texExport()" title="Файлы work/head_edit.png и work/head_edit.obj на диске проекта">Сохранить в work/</button></div></div>
  <div><b>Импорт части</b><div class="help" style="margin:4px 0 8px">Три шага: 1) щёлкните часть в дереве (или загрузите свой файл); 2) выберите, как вставить; 3) «Открыть в редакторе». «Отменить» в шапке вернёт прежнюю сцену.</div>
   <label class="btn" style="cursor:pointer;margin-bottom:8px">Загрузить файл с компьютера (.glb, .gltf, .obj)<input type="file" id="ifile" accept=".glb,.gltf,.obj" hidden onchange="upload(this.files[0])"></label>
   <div class="fld"><div class="lb"><span>1. Что взять — дерево моделей</span></div>
    <div id="tree" class="tree" role="tree" aria-label="Источники, файлы и части"></div>
    <div class="help">Раскройте группу → файл → часть и щёлкните часть. Как в Blender: файл — это «коллекция», части — объекты внутри неё.</div></div>
-  <div class="prevbox"><canvas id="ppv" aria-label="Предпросмотр выбранной части"></canvas><div class="pvmsg" id="ppm">Выберите часть в дереве — здесь появится её вид</div></div>
-  <div class="help" id="ppi"></div>
   <div class="box" id="picked" aria-live="polite">Ничего не выбрано</div>
   <div hidden><select id="dn" aria-label="Источник" onchange="loadParts()"></select><div id="dnh"></div><select id="dpart" aria-label="Часть файла"></select></div>
   <div class="fld"><div class="lb"><span>2. Как вставить</span></div><select id="sc" aria-label="Как вставить"><option value="open">показать как есть (без манекена)</option><option value="match_ring">поставить на шею манекена</option><option value="keep">на шею, без масштаба</option></select><div class="help" id="sch">Часть открывается целиком, без манекена: так видно саму модель.</div></div>
@@ -188,7 +191,7 @@ addEventListener('DOMContentLoaded',()=>{if(location.hash=='#model')setWs('model
 window.addEventListener('error',e=>{console.log(e.filename,e.lineno,e.colno,e.error&&e.error.stack);fetch('/api/edit/state?err='+encodeURIComponent(e.message+' @'+e.filename+':'+e.lineno+':'+e.colno+' '+(e.error&&e.error.stack)));const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка скрипта: '+e.message;t.append(d)}});
 window.addEventListener('unhandledrejection',e=>{const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка: '+(e.reason&&e.reason.message||e.reason);t.append(d)}});
 const $=id=>document.getElementById(id);let view='mesh',HF=[],tmesh=null,ttex=null,tg=null,cornerV=null,UVD=null,TI={available:true,can_undo:false,can_redo:false},tmode='paint',stroke=[],uvv={sz:1,ox:0,oy:0,fit:true},gr=null,TX=document.createElement('canvas');
-let selHist=[],selRedo=[],curIds=[],tool='brush',NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null,nsel=0,nops=0;
+let shade='solid',wov=null;let selHist=[],selRedo=[],curIds=[],tool='brush',NF=0,NH=0,mode='add',sel=true,mesh,geo,col,busy=false,pending=null,nsel=0,nops=0;
 const post=(p,d)=>fetch('/api/edit/'+p,{method:'POST',body:JSON.stringify(d||{})}).then(r=>r.json());
 function toast(t,k){const e=document.createElement('div');e.className='toast '+(k||'');e.textContent=t;$('toasts').append(e);setTimeout(()=>e.remove(),k=='err'?7000:3500)}
 const setSt=t=>$('st').textContent=t;
@@ -275,7 +278,7 @@ async function toggleBefore(){if(view!='mesh'){toast('«До» показыва�
 async function hist(a){const r=await post(a);await reloadMesh(true);refresh();toast(r&&r.error?r.error:(a=='undo'?'Отменено':'Возвращено'),r&&r.error?'err':'')}
 async function reloadMesh(fit,url){showB=false;$('bb').classList.remove('on');$('bb').textContent='Показать «до»';const m=await (await fetch(url||'/api/edit/mesh')).json();NH=m.nhead;NF=m.nfhead;if(!url)HF=m.f.slice(0,NF*3);
  S.remove(mesh);geo.dispose();geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(m.v,3));geo.setIndex(m.f);col=new Float32Array(m.v.length);geo.setAttribute('color',new THREE.BufferAttribute(col,3));mesh.geometry=geo;S.add(mesh);
- geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true);if(!url){await tinfo();if(TX.width>=512&&TI.available)await loadTexImg();if(view!='mesh'&&!TI.available){await setView('mesh');toast('У этой модели нет развёртки (UV): доступна только форма')}else await refreshView()}}
+ geo.computeVertexNormals();geo.computeBoundingSphere();const st=await (await fetch('/api/edit/state')).json();paint(st.draft_vertices);if(fit)frame(true);if(wov)wov.geometry=geo;if(!url){await tinfo();if(TX.width>=512&&TI.available)await loadTexImg();if(view!='mesh'&&!TI.available){await setView('mesh');toast('У этой модели нет развёртки (UV): доступна только форма')}else await refreshView()}}
 let JOB=null;
 async function rep(){if(!$('dn').value||!$('dpart').value){toast('Выберите источник и часть файла','err');return}const r=await post('replace_job',{donor:$('dn').value,part:$('dpart').value,scale:$('sc').value});if(r.error){toast(r.error,'err');return}
  JOB=r.job;$('prog').hidden=false;$('pc').hidden=false;$('rrep').hidden=true;$('rrep').style.borderColor='';$('brp').disabled=true;setSt('Заменяю часть…');
@@ -313,14 +316,25 @@ function pvInit(){if(PV)return PV;const cv=$('ppv');let r;try{r=new THREE.WebGLR
  const c=new THREE.PerspectiveCamera(35,1,.001,1000),o=new THREE.OrbitControls(c,cv);PV={r,s,c,o,m:null};
  (function loop(){requestAnimationFrame(loop);if(!$('dlg').open)return;const w=cv.clientWidth,h=cv.clientHeight;if(w&&(cv.width!=w||cv.height!=h)){r.setSize(w,h,false);c.aspect=w/h;c.updateProjectionMatrix()}r.render(s,c)})();return PV}
 let pvSeq=0;
+let pvShadeK='solid';
+function pvShade(k){const v=PV;if(k)pvShadeK=k;const ov=$('pov').checked;if(!v||!v.m)return;const t=pvShadeK=='tex'&&v.mats.tex;
+ for(const x of['solid','tex','wire'])$('psh-'+x).setAttribute('aria-pressed',x==pvShadeK);
+ v.m.material=t?v.mats.tex:v.mats.solid;v.m.material.wireframe=pvShadeK=='wire';
+ if(v.w){v.s.remove(v.w);v.w.material.dispose();v.w=null}
+ if(ov&&pvShadeK!='wire'){v.w=new THREE.Mesh(v.m.geometry,new THREE.MeshBasicMaterial({wireframe:true,color:0x10131a,transparent:true,opacity:.35}));v.s.add(v.w)}}
 async function previewPart(id,name){const v=pvInit();if(!v)return;const my=++pvSeq,key=id+'|'+name;$('ppm').textContent='Загружаю вид…';
+ if(id=='__current__')delete PVC[key];
  let d=PVC[key];if(!d){d=await (await fetch('/api/edit/part_mesh?src='+encodeURIComponent(id)+'&part='+encodeURIComponent(name))).json();if(!d.error)PVC[key]=d}
  if(my!=pvSeq)return;if(d.error){$('ppm').textContent='Нет предпросмотра: '+d.error;return}
  if(v.m){v.s.remove(v.m);v.m.geometry.dispose()}
- const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(d.v),3));g.setIndex(d.f);g.computeVertexNormals();
- v.m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xd9c2b0,roughness:.85,side:THREE.DoubleSide}));v.s.add(v.m);
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(d.v),3));if(d.f)g.setIndex(d.f);if(d.uv)g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(d.uv),2));g.computeVertexNormals();
+ const solid=new THREE.MeshStandardMaterial({color:0xd9c2b0,roughness:.85,side:THREE.DoubleSide});let tm=null;
+ if(d.tex){const t=new THREE.TextureLoader().load('/api/edit/part_texture?src='+encodeURIComponent(id)+'&part='+encodeURIComponent(name)+'&r='+Date.now());tm=new THREE.MeshStandardMaterial({map:t,roughness:.9,side:THREE.DoubleSide})}
+ v.mats={solid,tex:tm};v.m=new THREE.Mesh(g,solid);v.s.add(v.m);
+ for(const x of['solid','tex','wire']){const bt=$('psh-'+x);if(x=='tex'){bt.disabled=!d.tex;bt.title=d.tex?'С текстурой':'У этой части нет текстуры'}}
+ pvShadeK=d.tex?'tex':(pvShadeK=='tex'?'solid':pvShadeK);pvShade();
  const R=Math.max(...d.size)/2||1;v.c.position.set(0,R*.4,R*4.4);v.o.target.set(0,0,0);v.o.update();$('ppm').textContent='';
- $('ppi').textContent=d.faces+' треугольников · габариты '+d.size.join(' × ')}
+ $('ppi').textContent=d.faces+' треугольников · габариты '+d.size.join(' × ')+(d.tex?' · с текстурой':' · без текстуры')}
 function pickPart(id,name){previewPart(id,name);if(!PARTS[id])return;$('dn').value=id;$('dpart').innerHTML=PARTS[id].map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>').join('');$('dpart').value=name;
  $('tree').querySelectorAll('.prt').forEach(b=>b.setAttribute('aria-pressed',b.closest('details.fl').dataset.src==id&&b.dataset.p==name));
  const o=$('dn').selectedOptions[0];$('picked').innerHTML='Выбрано: <b>'+esc(o?o.textContent:id)+'</b> › <b>'+esc(name=='__all__'?'вся модель':name)+'</b>'}
@@ -342,14 +356,22 @@ async function buildTex(){const u=await (await fetch('/api/edit/mesh_uv')).json(
  tg=new THREE.BufferGeometry();tg.setAttribute('position',new THREE.BufferAttribute(pos,3));tg.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(u.uv),2));tg.setAttribute('color',new THREE.BufferAttribute(new Float32Array(n*3).fill(1),3));tg.computeVertexNormals();
  if(!ttex)ttex=new THREE.CanvasTexture(TX);
  if(!tmesh)tmesh=new THREE.Mesh(tg,new THREE.MeshStandardMaterial({map:ttex,vertexColors:true,roughness:.9,side:THREE.DoubleSide}));else tmesh.geometry=tg;
- S.add(tmesh);tmesh.visible=view=='tex';tintT();return true}
+ S.add(tmesh);tmesh.visible=view=='tex'||(shade=='tex'&&view=='mesh');if(tmesh.visible)mesh.visible=false;tintT();return true}
 function tintT(){if(!tg)return;const c=tg.attributes.color.array,m=new Uint8Array(NH);for(const v of curIds)m[v]=1;for(let i=0;i<cornerV.length;i++){const k=m[cornerV[i]];c[i*3]=k?.55:1;c[i*3+1]=k?.8:1;c[i*3+2]=1}tg.attributes.color.needsUpdate=true}
 async function loadUV(){const r=await (await fetch('/api/edit/uv_layout')).json();if(r.error){toast(r.error,'err');return false}UVD=r;return true}
 async function refreshView(){if(view=='tex')await buildTex();else if(view=='uv'){await loadUV();drawUV()}}
+async function setShade(k){if(k)shade=k;const ov=$('mov').checked;for(const x of['solid','tex','wire'])$('msh-'+x).setAttribute('aria-pressed',x==shade);
+ if(shade=='tex'&&!TI.available){toast('У этой модели нет текстуры (в файле её не было)','err');shade='solid';return setShade()}
+ if(view=='uv'){return}
+ const useTex=view=='tex'||shade=='tex';if(useTex&&!tmesh&&!await buildTex())return;
+ mesh.visible=!useTex;if(tmesh)tmesh.visible=useTex;const act=useTex?tmesh:mesh;
+ for(const m of[mesh,tmesh])if(m)m.material.wireframe=shade=='wire'&&m==act;
+ if(ov&&shade!='wire'){if(!wov){wov=new THREE.Mesh(act.geometry,new THREE.MeshBasicMaterial({wireframe:true,color:0x10131a,transparent:true,opacity:.35,depthTest:true}));wov.raycast=()=>{};S.add(wov)}wov.geometry=act.geometry}
+ if(wov)wov.visible=ov&&shade!='wire'}
 async function setView(v){if(v!='mesh'&&!TI.available){toast('Текстуры и UV есть только у шаблона','err');return}
  if(v!='mesh'){if(TX.width<512)await loadTexImg();if(v=='uv'&&!await loadUV())return;if(v=='tex'&&!await buildTex())return}
- view=v;for(const k of['mesh','tex','uv'])$('v-'+k).setAttribute('aria-pressed',k==v);
- mesh.visible=v=='mesh';if(tmesh)tmesh.visible=v=='tex';cv.style.display=v=='uv'?'none':'block';$('uvc').style.display=v=='uv'?'block':'none';
+ view=v;if(v=='tex'&&shade=='solid')shade='tex';for(const k of['mesh','tex','uv'])$('v-'+k).setAttribute('aria-pressed',k==v);
+ setShade();cv.style.display=v=='uv'?'none':'block';$('uvc').style.display=v=='uv'?'block':'none';
  if(v!='mesh')$('s-tex').open=true;if(v=='uv')$('s-uv').open=true;
  if(v=='uv'&&!['paint','orbit'].includes(tool))tool='paint';if(v=='mesh'&&tool=='paint')tool='brush';
  if(v=='uv'){uvv.fit=true;uvSize()}setTool(tool);ctxPanels();$('empty').hidden=v!='mesh'||nsel>0;drawUV()}

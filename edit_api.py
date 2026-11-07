@@ -266,11 +266,59 @@ def _donor(name, part=None):
     return V, inv.ravel()[g.faces], info
 
 
+CUR = '__current__'      # the model as it would be exported now (preview of the export)
+
+
+def _current_donor(body):
+    """the current head (and body) as a donor: the same GLB that «export» gives, read back"""
+    import tempfile
+    with LOCK:
+        b, _, _ = export_bytes('glb', body)
+    with tempfile.TemporaryDirectory() as d:
+        fn = os.path.join(d, 'cur.glb')
+        open(fn, 'wb').write(b)
+        geoms = _geoms(fn)
+        return _merge_all(list(geoms.values())) if len(geoms) > 1 else _single(list(geoms.values())[0])
+
+
+def _single(g):
+    V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
+    uv = getattr(g.visual, 'uv', None)
+    info = None
+    if uv is not None and len(uv) == len(g.vertices):
+        mat = getattr(g.visual, 'material', None)
+        img = getattr(mat, 'baseColorTexture', None) or getattr(mat, 'image', None)
+        info = {'vt': np.asarray(uv, float), 'T': np.asarray(g.faces, int), 'img': img}
+    return V, inv.ravel()[g.faces], info
+
+
+def _preview_src(src, part):
+    if src == CUR:
+        return _current_donor(part == 'body')
+    return _donor(src, part or None)
+
+
+def _tex_ok(F, info):
+    return (info is not None and info.get('img') is not None and info.get('vt') is not None and
+            info.get('T') is not None and len(info['T']) == len(F))
+
+
 def part_mesh(src, part):
-    """a donor part for the preview before import: {v, f, size}; nothing is changed, big meshes are thinned to ~40k faces"""
-    V, F, _ = _donor(src, part or None)
+    """a donor part for the preview before import: {v, f, size, [uv]}; nothing is changed.
+    Untextured meshes are indexed and thinned to ~40k faces; textured ones are sent per corner (v, uv) with every Nth face dropped over 120k"""
+    V, F, info = _preview_src(src, part)
     V = np.asarray(V, float)
     F = np.asarray(F, int)
+    mid = (V.max(0) + V.min(0)) / 2
+    ext = V.max(0) - V.min(0)
+    size = [round(float(x), 3) for x in ext]
+    if _tex_ok(F, info):
+        T = np.asarray(info['T'], int)
+        if len(F) > 120000:
+            k = np.arange(0, len(F), int(np.ceil(len(F) / 120000)))
+            F, T = F[k], T[k]
+        return {'v': np.round(V[F] - mid, 4).ravel().tolist(), 'uv': np.round(np.asarray(info['vt'], float)[T], 5).ravel().tolist(),
+                'size': size, 'faces': int(len(F)), 'tex': True}
     if len(F) > 40000:
         try:
             import fast_simplification
@@ -281,9 +329,24 @@ def part_mesh(src, part):
     remap = np.full(len(V), -1)
     remap[used] = np.arange(len(used))
     V, F = V[used], remap[F]
-    ext = V.max(0) - V.min(0)
-    return {'v': np.round(V - (V.max(0) + V.min(0)) / 2, 4).ravel().tolist(), 'f': F.ravel().tolist(), 'size': [round(float(x), 3) for x in ext],
-            'faces': int(len(F))}
+    return {'v': np.round(V - mid, 4).ravel().tolist(), 'f': F.ravel().tolist(), 'size': size, 'faces': int(len(F)), 'tex': False}
+
+
+def part_texture_png(src, part):
+    """the texture of a donor part (or the whole-model atlas) as PNG bytes, ≤1024 px; None when it has none"""
+    import io
+    _, F, info = _preview_src(src, part)
+    if not _tex_ok(np.asarray(F), info):
+        return None
+    im = info['img']
+    if not hasattr(im, 'convert'):
+        from PIL import Image
+        im = Image.fromarray(np.asarray(im))
+    im = im.convert('RGB')
+    im.thumbnail((1024, 1024))
+    o = io.BytesIO()
+    im.save(o, 'PNG')
+    return o.getvalue()
 
 
 def save_upload(name, data):

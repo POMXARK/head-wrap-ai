@@ -166,6 +166,14 @@ class H(BaseHTTPRequestHandler):
                 self.send(edit_api.part_mesh(qq.get('src', [''])[0], qq.get('part', [''])[0]))
             except Exception as e:
                 self.send({'error': str(e)})
+        elif path == '/api/edit/part_texture':
+            import edit_api
+            qq = urllib.parse.parse_qs(q)
+            try:
+                b = edit_api.part_texture_png(qq.get('src', [''])[0], qq.get('part', [''])[0])
+                self.send(b, 'image/png') if b else self.send({'error': 'у части нет текстуры'})
+            except Exception as e:
+                self.send({'error': str(e)})
         elif path == '/api/edit/export':
             import edit_api
             qq = urllib.parse.parse_qs(q)
