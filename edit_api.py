@@ -166,6 +166,9 @@ def _geoms(path):
     return out
 
 
+ALL = '__all__'      # the whole file as one donor: every part merged
+
+
 def donor_parts(name):
     """[{name, vertices}] of the meshes inside a donor file (the user picks the head among them)"""
     import trimesh
@@ -174,6 +177,9 @@ def donor_parts(name):
         return [{'name': 'head', 'vertices': len(A.parts['head'].V) if A else 0}]
     g = _geoms(os.path.join(HERE, rel))
     out = []
+    if len(g) > 1:
+        out.append({'name': ALL, 'vertices': int(sum(len(v.vertices) for v in g.values())), 'ok': True,
+                    'label': '★ Вся модель (%d частей, без текстуры)' % len(g)})
     for k, v in g.items():
         ok = False
         if len(v.vertices) >= 30:
@@ -207,6 +213,14 @@ def _donor(name, part=None):
         return m.V, m.F, {'vt': vt, 'T': T, 'img': tex}
     import trimesh
     geoms = _geoms(os.path.join(HERE, rel))
+    if part == ALL and len(geoms) > 1:     # all parts in one mesh; several textures cannot be one, so no UV
+        Vs, Fs, o = [], [], 0
+        for m in geoms.values():
+            Vs.append(np.asarray(m.vertices, float))
+            Fs.append(np.asarray(m.faces, int) + o)
+            o += len(m.vertices)
+        V, inv = np.unique(np.vstack(Vs).round(6), axis=0, return_inverse=True)
+        return V, inv.ravel()[np.vstack(Fs)], None
     g = geoms[part] if part in geoms else (geoms['geometry_0'] if name == 'hero1' else max(geoms.values(), key=lambda x: len(x.vertices)))
     V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
     uv = getattr(g.visual, 'uv', None)

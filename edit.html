@@ -304,7 +304,7 @@ $('sc').addEventListener('change',()=>$('sch').textContent=SCH[$('sc').value]);
 function buildTree(src){$('tree').innerHTML=GROUPS.map(([t,f])=>{const it=src.filter(f);return it.length?'<details open><summary>'+t+' <span class="help">('+it.length+')</span></summary>'+it.map(x=>'<details class="fl" data-src="'+esc(x.id)+'"><summary>'+esc(x.label.replace(/^(из )?игр[аы]: /,''))+'</summary><div class="parts help">загрузка…</div></details>').join('')+'</details>':''}).join('');
  $('tree').querySelectorAll('details.fl').forEach(d=>d.addEventListener('toggle',()=>{if(d.open)fillFile(d)}))}
 async function fillFile(d){const id=d.dataset.src,box=d.querySelector('.parts');if(!PARTS[id]){const r=await (await fetch('/api/edit/parts?src='+encodeURIComponent(id))).json();if(r.error){box.textContent=r.error;return}PARTS[id]=r.parts}
- box.className='parts';box.innerHTML=PARTS[id].map(p=>'<button class="prt" role="treeitem" data-p="'+esc(p.name)+'" aria-pressed="'+(id==$('dn').value&&p.name==$('dpart').value)+'"><span>'+esc(p.name)+'</span><small>'+p.vertices+' верш.'+(p.ok?'':' · мелкая')+'</small></button>').join('')}
+ box.className='parts';box.innerHTML=PARTS[id].map(p=>'<button class="prt" role="treeitem" data-p="'+esc(p.name)+'" aria-pressed="'+(id==$('dn').value&&p.name==$('dpart').value)+'"><span>'+esc(p.label||p.name)+'</span><small>'+p.vertices+' верш.'+(p.ok?'':' · мелкая')+'</small></button>').join('')}
 $('tree').addEventListener('click',e=>{const b=e.target.closest('.prt');if(!b)return;pickPart(b.closest('details.fl').dataset.src,b.dataset.p)});
 /* предпросмотр части перед импортом: свой маленький вьюер */
 let PV=null;const PVC={};
@@ -323,9 +323,9 @@ async function previewPart(id,name){const v=pvInit();if(!v)return;const my=++pvS
  $('ppi').textContent=d.faces+' треугольников · габариты '+d.size.join(' × ')}
 function pickPart(id,name){previewPart(id,name);if(!PARTS[id])return;$('dn').value=id;$('dpart').innerHTML=PARTS[id].map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>').join('');$('dpart').value=name;
  $('tree').querySelectorAll('.prt').forEach(b=>b.setAttribute('aria-pressed',b.closest('details.fl').dataset.src==id&&b.dataset.p==name));
- const o=$('dn').selectedOptions[0];$('picked').innerHTML='Выбрано: <b>'+esc(o?o.textContent:id)+'</b> › <b>'+esc(name)+'</b>'}
+ const o=$('dn').selectedOptions[0];$('picked').innerHTML='Выбрано: <b>'+esc(o?o.textContent:id)+'</b> › <b>'+esc(name=='__all__'?'вся модель':name)+'</b>'}
 async function loadParts(){const id=$('dn').value;if(!id)return;const r=await (await fetch('/api/edit/parts?src='+encodeURIComponent(id))).json();if(r.error){toast(r.error,'err');$('dpart').innerHTML='';return}
- PARTS[id]=r.parts;const okp=r.parts.filter(p=>p.ok),big=(okp.length?okp:r.parts).reduce((a,b)=>b.vertices>a.vertices?b:a);
+ PARTS[id]=r.parts;const okp=r.parts.filter(p=>p.ok),big=(okp.length?okp:r.parts).filter(p=>p.name!='__all__').reduce((a,b)=>b.vertices>a.vertices?b:a);
  const d=$('tree').querySelector('details.fl[data-src="'+CSS.escape(id)+'"]');if(d){d.open=true;await fillFile(d)}pickPart(id,big.name)}
 async function upload(f){if(!f)return;if(f.size>64<<20){toast('Файл больше 64 МБ','err');return}const r=await (await fetch('/api/edit/upload?name='+encodeURIComponent(f.name),{method:'POST',body:f})).json();$('ifile').value='';
  if(r.error){toast(r.error,'err');return}const st=await (await fetch('/api/edit/state')).json();fillSrc(st.sources,r.id);toast('Файл загружен: выберите нужную часть и нажмите «Импортировать»','ok')}
