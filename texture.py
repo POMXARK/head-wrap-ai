@@ -52,7 +52,12 @@ def register(head, vt, T, img=None):
         a = np.full((1024, 1024, 3), 200, np.uint8)
     else:
         a = np.asarray(img.convert('RGB') if hasattr(img, 'convert') else img, np.uint8).copy()
-    s = {'vt': np.asarray(vt, float), 'F': np.asarray(head.F).copy(), 'T': np.asarray(T, int), 'nv': len(head.V), 'tex': a,
+    alpha = None
+    if img is not None and hasattr(img, 'getchannel') and 'A' in img.getbands():
+        al = np.asarray(img.getchannel('A'), np.uint8)
+        if al.shape == a.shape[:2] and al.min() < 255:
+            alpha = al.copy()       # cut-outs of the file (lashes, eyes): shown as holes, not as the colour under them
+    s = {'alpha': alpha, 'vt': np.asarray(vt, float), 'F': np.asarray(head.F).copy(), 'T': np.asarray(T, int), 'nv': len(head.V), 'tex': a,
          'orig': a.copy(), 'undo': [], 'redo': [], 'rev': 0}
     REGISTRY[_key(head)] = s
     return s
@@ -95,7 +100,11 @@ def _push(s, kind):
 
 def png(head):
     b = io.BytesIO()
-    Image.fromarray(_need(head)['tex']).save(b, 'PNG')
+    s = _need(head)
+    a = s['tex']
+    if s.get('alpha') is not None and s['alpha'].shape == a.shape[:2]:
+        a = np.dstack([a, s['alpha']])
+    Image.fromarray(a).save(b, 'PNG')
     return b.getvalue()
 
 

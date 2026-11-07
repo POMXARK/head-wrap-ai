@@ -260,7 +260,7 @@ def _merge_all(ms):
     cols = int(np.ceil(np.sqrt(n)))
     rows = int(np.ceil(n / cols))
     cell = 1024 if n <= 4 else 512
-    atlas = Image.new('RGB', (cols * cell, rows * cell), (200, 200, 200))
+    atlas = Image.new('RGBA', (cols * cell, rows * cell), (200, 200, 200, 255))
     Vs, Fs, vts, Ts, o, ov, Ns = [], [], [], [], 0, 0, []
     for i, m in enumerate(ms):
         c, r = i % cols, i // cols
@@ -269,7 +269,7 @@ def _merge_all(ms):
         uv = getattr(m.visual, 'uv', None)
         box = (c * cell, (rows - 1 - r) * cell)
         if uv is not None and len(uv) == len(m.vertices) and img is not None:
-            atlas.paste(img.convert('RGB').resize((cell, cell)), box)
+            atlas.paste(img.convert('RGBA').resize((cell, cell)), box)
             u = np.asarray(uv, float)
             f0 = np.asarray(m.faces, int)
             keep = _alpha_keep(m, img, uv)
@@ -290,7 +290,7 @@ def _merge_all(ms):
                 col = tuple(int(x) for x in mat.main_color[:3])
             except Exception:
                 pass
-            atlas.paste(Image.new('RGB', (cell, cell), col), box)
+            atlas.paste(Image.new('RGBA', (cell, cell), tuple(col)[:3] + (255,)), box)
         f0 = np.asarray(m.faces, int)
         vts.append(np.c_[np.full(len(f0) * 3, (c + 0.5) / cols), np.full(len(f0) * 3, (r + 0.5) / rows)])
         Ts.append(np.arange(len(f0) * 3).reshape(-1, 3) + ov)
@@ -401,7 +401,7 @@ def part_texture_png(src, part):
     if not hasattr(im, 'convert'):
         from PIL import Image
         im = Image.fromarray(np.asarray(im))
-    im = im.convert('RGB')
+    im = im.convert('RGBA' if 'A' in im.getbands() else 'RGB')
     im.thumbnail((2560, 2560))
     o = io.BytesIO()
     im.save(o, 'PNG')
