@@ -159,6 +159,13 @@ class H(BaseHTTPRequestHandler):
                     self.send({'parts': edit_api.donor_parts(urllib.parse.parse_qs(q).get('src', [''])[0])})
             except Exception as e:
                 self.send({'error': str(e)})
+        elif path == '/api/edit/part_mesh':
+            import edit_api
+            qq = urllib.parse.parse_qs(q)
+            try:
+                self.send(edit_api.part_mesh(qq.get('src', [''])[0], qq.get('part', [''])[0]))
+            except Exception as e:
+                self.send({'error': str(e)})
         elif path == '/api/edit/export':
             import edit_api
             qq = urllib.parse.parse_qs(q)

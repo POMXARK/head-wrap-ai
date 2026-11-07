@@ -83,6 +83,7 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 #mfr{position:fixed;left:0;right:0;top:48px;bottom:0;width:100%;height:calc(100% - 48px);border:0;background:var(--bg);z-index:4}#mfr[hidden]{display:none}
 body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
 .tree{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--panel2);padding:4px}.tree details>summary{cursor:pointer;padding:6px 8px;border-radius:6px;font-size:13px}.tree details>summary:hover{background:var(--panel)}.tree>details>summary{font-weight:650}.tree details.fl{margin-left:12px}.tree .parts{margin-left:14px;display:flex;flex-direction:column;gap:2px}.tree .prt{display:flex;justify-content:space-between;gap:8px;text-align:left;min-height:32px;padding:4px 10px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--fg);cursor:pointer;font-size:13px}.tree .prt:hover{background:var(--panel)}.tree .prt[aria-pressed=true]{background:var(--acc-soft);border-color:var(--acc)}.tree .prt small{color:var(--mut)}
+.prevbox{position:relative;height:230px;border:1px solid var(--line);border-radius:var(--r);background:#222733;overflow:hidden}.prevbox canvas{width:100%;height:100%;display:block}.pvmsg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;color:#c9cfdb;font-size:13px;pointer-events:none}.pvmsg:empty{display:none}
 </style></head><body>
 <header class="top">
  <div class="seg wstabs" id="wst" role="tablist" aria-label="Рабочая зона"><button role="tab" id="ws-edit" aria-pressed="true" onclick="setWs('edit')">Редактирование</button><button role="tab" id="ws-model" aria-pressed="false" onclick="setWs('model')" title="Части любой GLB-модели: заменить, добавить, убрать, ремеш и UV">Части и ремеш</button></div>
@@ -169,6 +170,8 @@ body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
   <div class="fld"><div class="lb"><span>1. Что взять — дерево моделей</span></div>
    <div id="tree" class="tree" role="tree" aria-label="Источники, файлы и части"></div>
    <div class="help">Раскройте группу → файл → часть и щёлкните часть. Как в Blender: файл — это «коллекция», части — объекты внутри неё.</div></div>
+  <div class="prevbox"><canvas id="ppv" aria-label="Предпросмотр выбранной части"></canvas><div class="pvmsg" id="ppm">Выберите часть в дереве — здесь появится её вид</div></div>
+  <div class="help" id="ppi"></div>
   <div class="box" id="picked" aria-live="polite">Ничего не выбрано</div>
   <div hidden><select id="dn" aria-label="Источник" onchange="loadParts()"></select><div id="dnh"></div><select id="dpart" aria-label="Часть файла"></select></div>
   <div class="fld"><div class="lb"><span>2. Как вставить</span></div><select id="sc" aria-label="Как вставить"><option value="open">показать как есть (без манекена)</option><option value="match_ring">поставить на шею манекена</option><option value="keep">на шею, без масштаба</option></select><div class="help" id="sch">Часть открывается целиком, без манекена: так видно саму модель.</div></div>
@@ -303,7 +306,22 @@ function buildTree(src){$('tree').innerHTML=GROUPS.map(([t,f])=>{const it=src.fi
 async function fillFile(d){const id=d.dataset.src,box=d.querySelector('.parts');if(!PARTS[id]){const r=await (await fetch('/api/edit/parts?src='+encodeURIComponent(id))).json();if(r.error){box.textContent=r.error;return}PARTS[id]=r.parts}
  box.className='parts';box.innerHTML=PARTS[id].map(p=>'<button class="prt" role="treeitem" data-p="'+esc(p.name)+'" aria-pressed="'+(id==$('dn').value&&p.name==$('dpart').value)+'"><span>'+esc(p.name)+'</span><small>'+p.vertices+' верш.'+(p.ok?'':' · мелкая')+'</small></button>').join('')}
 $('tree').addEventListener('click',e=>{const b=e.target.closest('.prt');if(!b)return;pickPart(b.closest('details.fl').dataset.src,b.dataset.p)});
-function pickPart(id,name){if(!PARTS[id])return;$('dn').value=id;$('dpart').innerHTML=PARTS[id].map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>').join('');$('dpart').value=name;
+/* предпросмотр части перед импортом: свой маленький вьюер */
+let PV=null;const PVC={};
+function pvInit(){if(PV)return PV;const cv=$('ppv');let r;try{r=new THREE.WebGLRenderer({canvas:cv,antialias:true})}catch(e){$('ppm').textContent='3D-предпросмотр недоступен (нет WebGL)';return null}
+ const s=new THREE.Scene();s.background=new THREE.Color(0x222733);s.add(new THREE.HemisphereLight(0xffffff,0x444455,1.1));const l=new THREE.DirectionalLight(0xffffff,.8);l.position.set(2,4,6);s.add(l);
+ const c=new THREE.PerspectiveCamera(35,1,.001,1000),o=new THREE.OrbitControls(c,cv);PV={r,s,c,o,m:null};
+ (function loop(){requestAnimationFrame(loop);if(!$('dlg').open)return;const w=cv.clientWidth,h=cv.clientHeight;if(w&&(cv.width!=w||cv.height!=h)){r.setSize(w,h,false);c.aspect=w/h;c.updateProjectionMatrix()}r.render(s,c)})();return PV}
+let pvSeq=0;
+async function previewPart(id,name){const v=pvInit();if(!v)return;const my=++pvSeq,key=id+'|'+name;$('ppm').textContent='Загружаю вид…';
+ let d=PVC[key];if(!d){d=await (await fetch('/api/edit/part_mesh?src='+encodeURIComponent(id)+'&part='+encodeURIComponent(name))).json();if(!d.error)PVC[key]=d}
+ if(my!=pvSeq)return;if(d.error){$('ppm').textContent='Нет предпросмотра: '+d.error;return}
+ if(v.m){v.s.remove(v.m);v.m.geometry.dispose()}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(d.v),3));g.setIndex(d.f);g.computeVertexNormals();
+ v.m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xd9c2b0,roughness:.85,side:THREE.DoubleSide}));v.s.add(v.m);
+ const R=Math.max(...d.size)/2||1;v.c.position.set(0,R*.4,R*4.4);v.o.target.set(0,0,0);v.o.update();$('ppm').textContent='';
+ $('ppi').textContent=d.faces+' треугольников · габариты '+d.size.join(' × ')}
+function pickPart(id,name){previewPart(id,name);if(!PARTS[id])return;$('dn').value=id;$('dpart').innerHTML=PARTS[id].map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>').join('');$('dpart').value=name;
  $('tree').querySelectorAll('.prt').forEach(b=>b.setAttribute('aria-pressed',b.closest('details.fl').dataset.src==id&&b.dataset.p==name));
  const o=$('dn').selectedOptions[0];$('picked').innerHTML='Выбрано: <b>'+esc(o?o.textContent:id)+'</b> › <b>'+esc(name)+'</b>'}
 async function loadParts(){const id=$('dn').value;if(!id)return;const r=await (await fetch('/api/edit/parts?src='+encodeURIComponent(id))).json();if(r.error){toast(r.error,'err');$('dpart').innerHTML='';return}

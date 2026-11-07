@@ -218,6 +218,26 @@ def _donor(name, part=None):
     return V, inv.ravel()[g.faces], info
 
 
+def part_mesh(src, part):
+    """a donor part for the preview before import: {v, f, size}; nothing is changed, big meshes are thinned to ~40k faces"""
+    V, F, _ = _donor(src, part or None)
+    V = np.asarray(V, float)
+    F = np.asarray(F, int)
+    if len(F) > 40000:
+        try:
+            import fast_simplification
+            V, F = fast_simplification.simplify(V, F.astype(np.int32), target_reduction=1 - 40000 / len(F))
+        except Exception:
+            F = F[::max(1, len(F) // 40000)]
+    used = np.unique(F)
+    remap = np.full(len(V), -1)
+    remap[used] = np.arange(len(used))
+    V, F = V[used], remap[F]
+    ext = V.max(0) - V.min(0)
+    return {'v': np.round(V - (V.max(0) + V.min(0)) / 2, 4).ravel().tolist(), 'f': F.ravel().tolist(), 'size': [round(float(x), 3) for x in ext],
+            'faces': int(len(F))}
+
+
 def save_upload(name, data):
     """a model file picked by the user, into models/ (the library)"""
     import re
