@@ -59,7 +59,7 @@ print('export ok')
 
 # import: a donor file replaces the head through the same job path (and undo restores)
 n0 = len(E.A.parts['head'].V)
-rep = E.replace_head({'donor': fid, 'part': ps[0]['name']})
+rep = E.replace_head({'donor': fid, 'part': [p for p in ps if p['name'] != '__all__'][0]['name'], 'scale': 'match_ring'})
 assert len(E.A.parts['head'].V) != n0 or True
 # the imported head brings its own UV and texture: the tools work on it, separately from the template state
 assert E.tex_info()['available']
