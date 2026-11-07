@@ -63,7 +63,7 @@ def _mannequin(head):
     return V, np.array(F)
 
 
-DONORS = {'template': 'шаблон головы (этот же)', 'hero1': 'голова hero1 (work/hero1_head2.glb)'}
+DONORS = {'template': 'шаблон головы (вернуть исходную)', 'hero1': 'голова hero1 (work/hero1_head2.glb)'}
 
 
 GAME_GM = os.path.join(os.environ.get('W', os.path.dirname(HERE)), 'corsairs-remake', 'pdm-game', 'data/ai_models/orig/characters')
@@ -88,7 +88,7 @@ def model_dirs():
 def sources():
     """what a head can be imported from: the template, model files of this folder (work/, models/), game models (.gm)"""
     import glob
-    out = [{'id': 'template', 'label': 'шаблон головы (этот же)'}]
+    out = [{'id': 'template', 'label': 'шаблон головы (вернуть исходную)'}]
     for d in ('work', 'work/imported', 'models'):
         for f in sorted(glob.glob(os.path.join(HERE, d, '*'))):
             if f.lower().endswith(EXT):

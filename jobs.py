@@ -47,7 +47,9 @@ def start(fn):
         except Cancelled:
             j.status, j.msg = 'cancelled', 'отменено, модель не изменена'
         except Exception as e:
-            j.status, j.error, j.msg = 'error', str(e), 'ошибка'
+            import traceback
+            traceback.print_exc()      # the cause stays in the server window / log for a bug report
+            j.status, j.error, j.msg = 'error', '%s: %s' % (type(e).__name__, e) if not isinstance(e, ValueError) else str(e), 'ошибка'
     threading.Thread(target=run, daemon=True).start()
     return j
 
