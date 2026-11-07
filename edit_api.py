@@ -327,7 +327,13 @@ def part_mesh(src, part):
         if len(F) > 120000:
             k = np.arange(0, len(F), int(np.ceil(len(F) / 120000)))
             F, T = F[k], T[k]
-        return {'v': np.round(V[F] - mid, 4).ravel().tolist(), 'uv': np.round(np.asarray(info['vt'], float)[T], 5).ravel().tolist(),
+        import trimesh
+        tm = trimesh.Trimesh(V, F, process=False)
+        N = tm.vertex_normals[F]                          # smooth normals of the welded mesh: no facets across uv seams
+        fn = tm.face_normals[:, None, :]                  # a corner whose smooth normal is zero or looks away from its own face (parts with opposite winding meet) takes the face normal
+        bad = (np.linalg.norm(N, axis=2) < .5) | ((N * fn).sum(2) < 0)
+        N = np.where(bad[..., None], np.broadcast_to(fn, N.shape), N)
+        return {'n': np.round(N, 3).ravel().tolist(), 'v': np.round(V[F] - mid, 4).ravel().tolist(), 'uv': np.round(np.asarray(info['vt'], float)[T], 5).ravel().tolist(),
                 'size': size, 'faces': int(len(F)), 'tex': True}
     if len(F) > 40000:
         try:

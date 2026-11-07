@@ -12,7 +12,9 @@ from PIL import Image
 from bake import read_uv_faces, read_v
 
 
-def draw(W, tri, col, out, E=None, crop=None, yaws=(0, 40, 90)):
+def draw(W, tri, col, out, E=None, crop=None, yaws=(0, 40, 90), smooth=True):
+    """smooth: the light uses the smoothed vertex normals (the game has no facets); smooth=False gives the faceted look"""
+    VN = trimesh.Trimesh(np.asarray(W), np.asarray(tri), process=False).vertex_normals if smooth else None
     fig, ax = plt.subplots(1, len(yaws), figsize=(5 * len(yaws), 6))
     ax = np.atleast_1d(ax)
     for a, yaw in zip(ax, yaws):
@@ -28,6 +30,9 @@ def draw(W, tri, col, out, E=None, crop=None, yaws=(0, 40, 90)):
         z = V[tri].mean(1)[:, 2]
         order = [i for i in np.argsort(z) if vis[i]]
         nn = n / (np.linalg.norm(n, axis=1, keepdims=True) + 1e-12)
+        if smooth:
+            nv = (VN @ R.T)[tri].mean(1)
+            nn = nv / (np.linalg.norm(nv, axis=1, keepdims=True) + 1e-12)
         shade = 0.45 + 0.55 * np.clip(nn @ np.array([-0.35, 0.5, 0.8]), 0, 1)  # one light from the upper left front: relief is visible
         a.add_collection(PolyCollection([V[tri[i]][:, :2] for i in order], facecolors=(col * shade[:, None])[order], edgecolors='none'))
         a.set_xlim(*(crop[0] if crop else (V[:, 0].min(), V[:, 0].max()))); a.set_ylim(*(crop[1] if crop else (V[:, 1].min(), V[:, 1].max()))); a.set_aspect('equal'); a.axis('off')
