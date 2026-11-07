@@ -204,6 +204,54 @@ def _donor_ring(dV, dF):
     return max(loops, key=len)
 
 
+def _alpha_keep(m, img, uv):
+    """faces whose texture is not cut out (glTF alphaMode MASK: hair, blades, eyelashes); None when the texture has no alpha"""
+    if img is None or getattr(img, 'mode', '') != 'RGBA' or uv is None:
+        return None
+    a = np.asarray(img)[..., 3]
+    c = np.asarray(uv, float)[np.asarray(m.faces, int)].mean(1)
+    h, w = a.shape
+    px = a[np.clip(((1 - c[:, 1]) % 1 * h).astype(int), 0, h - 1), np.clip((c[:, 0] % 1 * w).astype(int), 0, w - 1)]
+    return px >= 128
+
+
+def _push(Vs, Fs, Ns, m, f0, o):
+    """a part into the merged mesh: its own seam duplicates are welded, but NOT across parts (eyes, hair and skin that touch keep their own normals);
+    the normals are the file's own (the game's), as Blender shows them"""
+    Vp, idx, inv = np.unique(np.asarray(m.vertices, float).round(6), axis=0, return_index=True, return_inverse=True)
+    try:
+        Ns.append(np.asarray(m.vertex_normals, float)[idx])
+    except Exception:
+        Ns.append(np.zeros((len(Vp), 3)))
+    Vs.append(Vp)
+    Fs.append(inv.ravel()[f0] + o)
+    return o + len(Vp)
+
+
+def _donor_ring(dV, dF):
+    """the neck hole of a donor head (opens a closed head at the bottom if needed); ValueError if there is none"""
+    try:
+        dV, dF, _, _ = open_neck(dV, dF, None)
+        loops = RP.boundary_loops(dF)
+    except ValueError:
+        loops = []
+    if not loops:
+        raise ValueError('в этой части нет головы с отверстием шеи (это волосы, одежда или деталь). Выберите в списке часть, помеченную «подходит»')
+    return max(loops, key=len)
+
+
+def _donor_ring(dV, dF):
+    """the neck hole of a donor head (opens a closed head at the bottom if needed); ValueError if there is none"""
+    try:
+        dV, dF, _, _ = open_neck(dV, dF, None)
+        loops = RP.boundary_loops(dF)
+    except ValueError:
+        loops = []
+    if not loops:
+        raise ValueError('в этой части нет головы с отверстием шеи (это волосы, одежда или деталь). Выберите в списке часть, помеченную «подходит»')
+    return max(loops, key=len)
+
+
 def _merge_all(ms):
     """every part of a file as one mesh with ONE texture: part textures go into a grid atlas (the editor holds one texture);
     a part without texture gets a flat cell of its colour. Returns (V, F, uvinfo)"""
@@ -213,7 +261,7 @@ def _merge_all(ms):
     rows = int(np.ceil(n / cols))
     cell = 1024 if n <= 4 else 512
     atlas = Image.new('RGB', (cols * cell, rows * cell), (200, 200, 200))
-    Vs, Fs, vts, Ts, o, ov = [], [], [], [], 0, 0
+    Vs, Fs, vts, Ts, o, ov, Ns = [], [], [], [], 0, 0, []
     for i, m in enumerate(ms):
         c, r = i % cols, i // cols
         mat = getattr(m.visual, 'material', None)
@@ -224,6 +272,9 @@ def _merge_all(ms):
             atlas.paste(img.convert('RGB').resize((cell, cell)), box)
             u = np.asarray(uv, float)
             f0 = np.asarray(m.faces, int)
+            keep = _alpha_keep(m, img, uv)
+            if keep is not None and keep.any():
+                f0 = f0[keep]
             cu = u[f0]                                    # (F,3,2) per-corner uv: a tiled triangle is shifted as a whole, not per vertex
             cu = cu - np.floor(cu.min(1, keepdims=True))   # into the unit square without tearing triangles that cross the border
             cu = np.clip(cu, 0, 1)
@@ -231,9 +282,7 @@ def _merge_all(ms):
             vts.append(np.c_[(c + cu[..., 0].ravel()) / cols, (r + cu[..., 1].ravel()) / rows])
             Ts.append(np.arange(len(f0) * 3).reshape(-1, 3) + ov)
             ov += len(f0) * 3
-            Vs.append(np.asarray(m.vertices, float))
-            Fs.append(f0 + o)
-            o += len(m.vertices)
+            o = _push(Vs, Fs, Ns, m, f0, o)
             continue
         else:
             col = (200, 200, 200)
@@ -246,12 +295,8 @@ def _merge_all(ms):
         vts.append(np.c_[np.full(len(f0) * 3, (c + 0.5) / cols), np.full(len(f0) * 3, (r + 0.5) / rows)])
         Ts.append(np.arange(len(f0) * 3).reshape(-1, 3) + ov)
         ov += len(f0) * 3
-        Vs.append(np.asarray(m.vertices, float))
-        Fs.append(f0 + o)
-        o += len(m.vertices)
-    V, inv = np.unique(np.vstack(Vs).round(6), axis=0, return_inverse=True)
-    F = np.vstack(Fs)
-    return V, inv.ravel()[F], {'vt': np.vstack(vts), 'T': np.vstack(Ts), 'img': atlas}
+        o = _push(Vs, Fs, Ns, m, f0, o)
+    return np.vstack(Vs), np.vstack(Fs), {'vt': np.vstack(vts), 'T': np.vstack(Ts), 'img': atlas, 'vn': np.vstack(Ns)}
 
 
 def _donor(name, part=None):
@@ -266,14 +311,7 @@ def _donor(name, part=None):
     if part == ALL and len(geoms) > 1:     # all parts in one mesh; their textures are packed into one atlas, UV remapped
         return _merge_all(list(geoms.values()))
     g = geoms[part] if part in geoms else (geoms['geometry_0'] if name == 'hero1' else max(geoms.values(), key=lambda x: len(x.vertices)))
-    V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
-    uv = getattr(g.visual, 'uv', None)
-    info = None
-    if uv is not None and len(uv) == len(g.vertices):
-        mat = getattr(g.visual, 'material', None)
-        img = getattr(mat, 'baseColorTexture', None) or getattr(mat, 'image', None)
-        info = {'vt': np.asarray(uv, float), 'T': np.asarray(g.faces, int), 'img': img}
-    return V, inv.ravel()[g.faces], info
+    return _single(g)
 
 
 CUR = '__current__'      # the model as it would be exported now (preview of the export)
@@ -292,13 +330,17 @@ def _current_donor(body):
 
 
 def _single(g):
-    V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
+    V, idx, inv = np.unique(g.vertices.round(6), axis=0, return_index=True, return_inverse=True)
     uv = getattr(g.visual, 'uv', None)
     info = None
     if uv is not None and len(uv) == len(g.vertices):
         mat = getattr(g.visual, 'material', None)
         img = getattr(mat, 'baseColorTexture', None) or getattr(mat, 'image', None)
         info = {'vt': np.asarray(uv, float), 'T': np.asarray(g.faces, int), 'img': img}
+        try:
+            info['vn'] = np.asarray(g.vertex_normals, float)[idx]
+        except Exception:
+            pass
     return V, inv.ravel()[g.faces], info
 
 
@@ -329,7 +371,8 @@ def part_mesh(src, part):
             F, T = F[k], T[k]
         import trimesh
         tm = trimesh.Trimesh(V, F, process=False)
-        N = tm.vertex_normals[F]                          # smooth normals of the welded mesh: no facets across uv seams
+        vn = info.get('vn')
+        N = (vn[F] if vn is not None and len(vn) == len(V) else tm.vertex_normals[F])                          # smooth normals of the welded mesh: no facets across uv seams
         fn = tm.face_normals[:, None, :]                  # a corner whose smooth normal is zero or looks away from its own face (parts with opposite winding meet) takes the face normal
         bad = (np.linalg.norm(N, axis=2) < .5) | ((N * fn).sum(2) < 0)
         N = np.where(bad[..., None], np.broadcast_to(fn, N.shape), N)
