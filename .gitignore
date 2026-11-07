@@ -1,4 +1,7 @@
-work/
+work/*
+!work/baked.png
+!work/hero1_eye.glb
+!work/eye_open.json
 __pycache__/
 fold_profile.png
 journal/edits.jsonl

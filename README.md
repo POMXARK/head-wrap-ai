@@ -24,5 +24,5 @@
 ## Файлы конвейера
 `wrap_fit.py` (обтяжка) → `bake.py` (запекание) → `colormatch.py` → `cleanneck.py` → `padedge.py` → `lama_seam.py` / `lama_patch.py` → `export.py` (+ `eye_slit.py`, `ponytail.py`) → игра (`pdm_glb2gm.py`). Инструменты на один раз: `lama_uvseam.py`, `smooth_strip.py` (тупики, см. docs/plan.md).
 
-## Файлы `work/` (не в git)
-Правка (`/edit`), «Модель» и оценка глаз берут данные из `work/`: нужны `baked.png`, `hero1_eye.glb`, `eye_open.json` (минимум — 3 МБ). Скопируйте их из рабочей копии на другой машине в `work/`. Без них сервер отвечает понятной ошибкой «нет файла …».
+## Файлы `work/`
+Три файла для старта лежат в git: `work/baked.png` (текстура), `work/hero1_eye.glb` (собранная голова), `work/eye_open.json` (глаза) — после `git clone` правка, «Модель» и оценка глаз работают сразу. Всё остальное в `work/` (варианты, кэши, результаты) — локальное, в git не попадает.
