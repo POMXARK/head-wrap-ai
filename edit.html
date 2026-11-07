@@ -162,7 +162,7 @@ body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
   <details class="sec" id="s-log"><summary>Журнал правок</summary><div class="bd"><ol id="log"><li class="mut">Пока пусто</li></ol></div></details>
  </aside>
 </div>
-<footer class="status"><span id="st">Готово</span><span class="sp" style="flex:1"></span><span>Вне выделения модель не меняется (проверяется тестами)</span></footer>
+<footer class="status"><span id="st">Готово</span><span class="sp" style="flex:1"></span><span>Вне выделения модель не меняется (проверяется тестами)</span><span class="sp" style="margin-left:12px" id="ver" title="Версия кода сервера"></span></footer>
 <iframe id="mfr" title="Части модели и ремеш" hidden></iframe>
 <dialog id="dlg" aria-labelledby="dlgt"><div class="hd"><span id="dlgt">Файл</span>
  <div class="seg dtabs" id="dtabs" role="tablist" aria-label="Что делать"><button role="tab" id="dt-imp" aria-selected="true" onclick="dlgTab('imp')">Импорт</button><button role="tab" id="dt-exp" aria-selected="false" onclick="dlgTab('exp')">Экспорт</button></div>
@@ -203,7 +203,7 @@ body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 function setWs(w){const m=w=='model',f=document.getElementById('mfr');if(m&&!f.getAttribute('src'))f.src='/model?embed=1';f.hidden=!m;document.body.classList.toggle('wsm',m);document.getElementById('ws-edit').setAttribute('aria-pressed',!m);document.getElementById('ws-model').setAttribute('aria-pressed',m);try{history.replaceState(null,'',m?'#model':'#')}catch(e){}}
-addEventListener('DOMContentLoaded',()=>{if(location.hash=='#model')setWs('model')});
+addEventListener('DOMContentLoaded',()=>{fetch('/api/version').then(r=>r.json()).then(v=>{const e=document.getElementById('ver');if(e)e.textContent='версия '+v.version}).catch(()=>{});if(location.hash=='#model')setWs('model')});
 window.addEventListener('error',e=>{console.log(e.filename,e.lineno,e.colno,e.error&&e.error.stack);fetch('/api/edit/state?err='+encodeURIComponent(e.message+' @'+e.filename+':'+e.lineno+':'+e.colno+' '+(e.error&&e.error.stack)));const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка скрипта: '+e.message;t.append(d)}});
 window.addEventListener('unhandledrejection',e=>{const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка: '+(e.reason&&e.reason.message||e.reason);t.append(d)}});
 const $=id=>document.getElementById(id);let view='mesh',HF=[],tmesh=null,ttex=null,tg=null,cornerV=null,UVD=null,TI={available:true,can_undo:false,can_redo:false},tmode='paint',stroke=[],uvv={sz:1,ox:0,oy:0,fit:true},gr=null,TX=document.createElement('canvas');

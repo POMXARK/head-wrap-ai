@@ -166,6 +166,13 @@ class H(BaseHTTPRequestHandler):
                 self.send(edit_api.part_mesh(qq.get('src', [''])[0], qq.get('part', [''])[0]))
             except Exception as e:
                 self.send({'error': str(e)})
+        elif path == '/api/version':      # which code the server runs: a stale pull looked like 'the fix did not work'
+            import subprocess
+            try:
+                v = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=os.path.dirname(os.path.abspath(__file__)), capture_output=True, text=True, timeout=5).stdout.strip()
+            except Exception:
+                v = ''
+            self.send({'version': v or 'неизвестно'})
         elif path == '/api/edit/part_texture':
             import edit_api
             qq = urllib.parse.parse_qs(q)
