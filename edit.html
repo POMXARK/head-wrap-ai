@@ -80,13 +80,15 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 .toast.err{border-left-color:var(--err)}.toast.ok{border-left-color:var(--ok)}
 @media(max-width:900px){body{overflow:auto;display:block}.main{display:flex;flex-direction:column}.tools{flex-direction:row;overflow:auto;border-right:0;border-bottom:1px solid var(--line)}.tool{flex:0 0 72px}.view{height:55vh}.side{border-left:0}.status{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+#mfr{position:fixed;left:0;right:0;top:48px;bottom:0;width:100%;height:calc(100% - 48px);border:0;background:var(--bg);z-index:4}#mfr[hidden]{display:none}
+body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
 </style></head><body>
 <header class="top">
- <h1>Правка области</h1>
+ <div class="seg wstabs" id="wst" role="tablist" aria-label="Рабочая зона"><button role="tab" id="ws-edit" aria-pressed="true" onclick="setWs('edit')">Правка</button><button role="tab" id="ws-model" aria-pressed="false" onclick="setWs('model')" title="Части любой GLB-модели: заменить, добавить, убрать, ремеш и UV">Части и ремеш</button></div>
  <button class="btn" id="bu" title="Отменить последний шаг: в виде «Сетка» — правку модели, в «Текстура»/«UV» — мазок (Z)" onclick="undoAny(false)">↶ Отменить</button>
  <button class="btn" id="br" title="Вернуть отменённый шаг (Shift+Z)" onclick="undoAny(true)">↷ Вернуть</button>
  <span class="sep"></span>
- <button class="btn" onclick="$('dlg').showModal()" title="Загрузить голову из файла или игры, сохранить результат">Файл</button>
+ <button class="btn fbtn" onclick="$('dlg').showModal()" title="Загрузить голову из файла или игры, сохранить результат">Файл</button>
  <button class="btn" id="bb" onclick="toggleBefore()" title="Сравнить с состоянием до последней правки">Показать «до»</button>
  <span class="sep"></span>
  <div class="seg" id="vm" role="group" aria-label="Что показывать"><button id="v-mesh" aria-pressed="true" onclick="setView('mesh')">Сетка</button><button id="v-tex" aria-pressed="false" onclick="setView('tex')">Текстура</button><button id="v-uv" aria-pressed="false" onclick="setView('uv')">UV</button></div>
@@ -156,6 +158,7 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
  </aside>
 </div>
 <footer class="status"><span id="st">Готово</span><span class="sp" style="flex:1"></span><span>Вне выделения модель не меняется (проверяется тестами)</span></footer>
+<iframe id="mfr" title="Части модели и ремеш" hidden></iframe>
 <dialog id="dlg" aria-labelledby="dlgt"><div class="hd"><span id="dlgt">Файл: импорт и экспорт</span><button class="btn" aria-label="Закрыть" onclick="$('dlg').close()">✕</button></div><div class="bd">
  <div><b>Экспорт</b><div class="help" id="xh" style="margin:4px 0 8px"></div>
   <label class="btn" style="justify-content:flex-start;margin-bottom:8px"><input type="checkbox" id="xb" onchange="xlinks()"> Вместе с манекеном (тело)</label>
@@ -173,6 +176,8 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
+function setWs(w){const m=w=='model',f=document.getElementById('mfr');if(m&&!f.getAttribute('src'))f.src='/model?embed=1';f.hidden=!m;document.body.classList.toggle('wsm',m);document.getElementById('ws-edit').setAttribute('aria-pressed',!m);document.getElementById('ws-model').setAttribute('aria-pressed',m);try{history.replaceState(null,'',m?'#model':'#')}catch(e){}}
+addEventListener('DOMContentLoaded',()=>{if(location.hash=='#model')setWs('model')});
 window.addEventListener('error',e=>{console.log(e.filename,e.lineno,e.colno,e.error&&e.error.stack);fetch('/api/edit/state?err='+encodeURIComponent(e.message+' @'+e.filename+':'+e.lineno+':'+e.colno+' '+(e.error&&e.error.stack)));const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка скрипта: '+e.message;t.append(d)}});
 window.addEventListener('unhandledrejection',e=>{const t=document.getElementById('toasts');if(t){const d=document.createElement('div');d.className='toast err';d.textContent='Ошибка: '+(e.reason&&e.reason.message||e.reason);t.append(d)}});
 const $=id=>document.getElementById(id);let view='mesh',HF=[],tmesh=null,ttex=null,tg=null,cornerV=null,UVD=null,TI={available:true,can_undo:false,can_redo:false},tmode='paint',stroke=[],uvv={sz:1,ox:0,oy:0,fit:true},gr=null,TX=document.createElement('canvas');
