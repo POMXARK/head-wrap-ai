@@ -252,7 +252,7 @@ def _donor_ring(dV, dF):
     return max(loops, key=len)
 
 
-def _merge_all(ms):
+def _merge_all(ms, names=None):
     """every part of a file as one mesh with ONE texture: part textures go into a grid atlas (the editor holds one texture);
     a part without texture gets a flat cell of its colour. Returns (V, F, uvinfo)"""
     from PIL import Image
@@ -262,7 +262,11 @@ def _merge_all(ms):
     cell = 1024 if n <= 4 else 512
     atlas = Image.new('RGBA', (cols * cell, rows * cell), (200, 200, 200, 255))
     Vs, Fs, vts, Ts, o, ov, Ns = [], [], [], [], 0, 0, []
+    parts = []
     for i, m in enumerate(ms):
+        if i:
+            parts[-1][2] = o
+        parts.append([(names[i] if names else 'part%d' % i), o, None])
         c, r = i % cols, i // cols
         mat = getattr(m.visual, 'material', None)
         img = getattr(mat, 'baseColorTexture', None) or getattr(mat, 'image', None)
@@ -307,7 +311,8 @@ def _merge_all(ms):
         Ts.append(np.arange(len(f0) * 3).reshape(-1, 3) + ov)
         ov += len(f0) * 3
         o = _push(Vs, Fs, Ns, m, f0, o)
-    return np.vstack(Vs), np.vstack(Fs), {'vt': np.vstack(vts), 'T': np.vstack(Ts), 'img': atlas, 'vn': np.vstack(Ns)}
+    parts[-1][2] = o
+    return np.vstack(Vs), np.vstack(Fs), {'vt': np.vstack(vts), 'T': np.vstack(Ts), 'img': atlas, 'vn': np.vstack(Ns), 'parts': parts}
 
 
 def _donor(name, part=None):
@@ -320,7 +325,7 @@ def _donor(name, part=None):
     import trimesh
     geoms = _geoms(os.path.join(HERE, rel))
     if part == ALL and len(geoms) > 1:     # all parts in one mesh; their textures are packed into one atlas, UV remapped
-        return _merge_all(list(geoms.values()))
+        return _merge_all(list(geoms.values()), list(geoms.keys()))
     g = geoms[part] if part in geoms else (geoms['geometry_0'] if name == 'hero1' else max(geoms.values(), key=lambda x: len(x.vertices)))
     return _single(g)
 
@@ -337,7 +342,7 @@ def _current_donor(body):
         fn = os.path.join(d, 'cur.glb')
         open(fn, 'wb').write(b)
         geoms = _geoms(fn)
-        return _merge_all(list(geoms.values())) if len(geoms) > 1 else _single(list(geoms.values())[0])
+        return _merge_all(list(geoms.values()), list(geoms.keys())) if len(geoms) > 1 else _single(list(geoms.values())[0])
 
 
 def _single(g):
@@ -516,7 +521,8 @@ def replace_prepare(d, step=lambda msg, frac: None):
     if d.get('scale') == 'open':      # show the model in the editor as it is: no mannequin, no neck, nothing is cut or scaled
         uv = {'vt': uvinfo['vt'], 'T': uvinfo['T'], 'img': uvinfo['img']} if uvinfo is not None else None
         return {'hV': dV, 'hF': dF, 'rep': {'ring_gap': 0.0, 'scale': 1.0}, 'd': d, 'seam': 'none', 'uv': uv,
-                'vn': uvinfo.get('vn') if uvinfo is not None else None}
+                'vn': uvinfo.get('vn') if uvinfo is not None else None,
+            'parts': uvinfo.get('parts') if uvinfo is not None else None}
     dV, dF, uvinfo, cut = open_neck(dV, dF, uvinfo)
     body = A.parts['body']
     step('ищу кольца розетки', 0.35)
@@ -557,6 +563,8 @@ def replace_commit(p):
     DRAFT = Selection(A.parts['head'])
     global HEAD_VN
     HEAD_VN = (np.asarray(p['vn'], float), A.parts['head'].V.copy()) if p.get('vn') is not None else None
+    global HEAD_PARTS
+    HEAD_PARTS = p.get('parts')
     if p.get('uv'):
         import texture
         texture.register(A.parts['head'], p['uv']['vt'], p['uv']['T'], p['uv']['img'])
@@ -596,6 +604,7 @@ def state():
             'ops': [dict(o, stale_scores=bool(o.get('scores')) and i < len(A.log) - 1) for i, o in enumerate(A.log)], 'donors': DONORS, 'sources': sources(), 'can_undo': bool(A._undo), 'can_redo': bool(A._redo)}
 
 
+HEAD_PARTS = None  # [[name, v0, v1]]: vertex ranges of the file parts inside the head mesh
 HEAD_VN = None     # (normals of the file, head vertices they belong to): the editor shades by them until the head changes
 
 
@@ -609,6 +618,8 @@ def mesh():
     r = {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(h.V), 'nfhead': len(h.F)}
     if HEAD_VN is not None and HEAD_VN[1].shape == h.V.shape and np.array_equal(HEAD_VN[1], h.V):
         r['vn'] = np.round(HEAD_VN[0], 4).ravel().tolist()
+        if HEAD_PARTS:
+            r['parts'] = HEAD_PARTS
         r['cull'] = True      # a game model is drawn one-sided (the game and Blender cull the back faces); two-sided copies of a face must not fight
     return r
 
