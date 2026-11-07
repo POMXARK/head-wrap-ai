@@ -1,5 +1,5 @@
 <!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Правка модели</title>
+<title>Редактирование</title>
 <style>
 /* Дизайн-система: токены, шаг 8 px, контраст текста ≥ 4.5:1, цели нажатия ≥ 36 px, один главный акцент */
 :root{--bg:#f4f5f7;--panel:#fff;--panel2:#f0f2f5;--fg:#1b2030;--mut:#566074;--line:#d5d9e1;--acc:#1d4ed8;--acc-fg:#fff;--acc-soft:#e3ebff;--ok:#166534;--warn:#92400e;--err:#b91c1c;--view:#222733;--r:8px;--s1:4px;--s2:8px;--s3:16px;--s4:24px;--shadow:0 4px 16px rgba(0,0,0,.18)}
@@ -84,7 +84,7 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
 </style></head><body>
 <header class="top">
- <div class="seg wstabs" id="wst" role="tablist" aria-label="Рабочая зона"><button role="tab" id="ws-edit" aria-pressed="true" onclick="setWs('edit')">Правка</button><button role="tab" id="ws-model" aria-pressed="false" onclick="setWs('model')" title="Части любой GLB-модели: заменить, добавить, убрать, ремеш и UV">Части и ремеш</button></div>
+ <div class="seg wstabs" id="wst" role="tablist" aria-label="Рабочая зона"><button role="tab" id="ws-edit" aria-pressed="true" onclick="setWs('edit')">Редактирование</button><button role="tab" id="ws-model" aria-pressed="false" onclick="setWs('model')" title="Части любой GLB-модели: заменить, добавить, убрать, ремеш и UV">Части и ремеш</button></div>
  <button class="btn" id="bu" title="Отменить последний шаг: в виде «Сетка» — правку модели, в «Текстура»/«UV» — мазок (Z)" onclick="undoAny(false)">↶ Отменить</button>
  <button class="btn" id="br" title="Вернуть отменённый шаг (Shift+Z)" onclick="undoAny(true)">↷ Вернуть</button>
  <span class="sep"></span>
