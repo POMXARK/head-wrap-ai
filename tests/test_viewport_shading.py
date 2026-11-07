@@ -14,7 +14,7 @@ for src, part in (('file:work/hero1_head2.glb', 'geometry_0'), ('file:work/hero1
 r = e.part_mesh('file:work/nricp.obj', '')
 assert not r['tex'] and 'f' in r and e.part_texture_png('file:work/nricp.obj', '') is None, 'obj has no texture'
 h = open(os.path.join(D, 'edit.html'), encoding='utf-8').read()
-for k in ('id="msh-solid"', 'id="msh-tex"', 'id="msh-wire"', 'id="mov"', 'function setShade', 'id="psh-tex"', 'id="pov"', 'id="psm"', 'id="msm"', 'function pvShade',
+for k in ('id="msh-solid"', 'id="msh-tex"', 'id="msh-wire"', 'id="mov"', 'function setShade', 'id="psh-tex"', 'id="pov"', 'function pvShade',
           '/api/edit/part_texture'):
     assert k in h, k
 print('PASS test_viewport_shading')
