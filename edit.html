@@ -56,7 +56,9 @@ kbd{font:11px ui-monospace,monospace;padding:1px 5px;border:1px solid var(--line
 #uvc{position:absolute;inset:0;width:100%;height:100%;display:none;touch-action:none}
 #vm{width:250px}
 input[type=color]{width:100%;height:36px;padding:2px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
-dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:0;width:min(520px,94vw);box-shadow:var(--shadow)}dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:0;width:min(1100px,96vw);box-shadow:var(--shadow)}dialog#dlg[open]{display:flex;flex-direction:column;height:min(720px,92vh)}
+.dtabs{width:240px}.dtabs button[aria-selected=true]{background:var(--acc-soft);font-weight:600}.dmain{flex:1;min-height:0;display:grid;grid-template-columns:380px 1fr}.dside{overflow:auto;padding:var(--s3);border-right:1px solid var(--line);display:flex;flex-direction:column}.dpn{display:flex;flex-direction:column;gap:12px;min-height:100%}.dpn[hidden]{display:none}.dpn .tree{flex:1;min-height:160px;max-height:none}.dview{padding:var(--s3);display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0}.dview .prevbox{flex:1;height:auto;min-height:240px}.pvbar{position:absolute;left:8px;top:8px;display:flex;gap:8px;align-items:center;z-index:2}.pvbar .seg button,.pvbar .btn{min-height:30px;font-size:12px}.pvbar .btn,.pvbar .seg{background:var(--panel)}.dft{display:flex;gap:var(--s2);align-items:flex-end;justify-content:flex-end;padding:12px var(--s3);border-top:1px solid var(--line)}.dmsg{flex:1;min-width:0}.dft>.btn{min-height:40px;padding:0 20px}
+@media(max-width:800px){.dmain{grid-template-columns:1fr;grid-template-rows:auto 1fr;overflow:auto}.dside{border-right:0;border-bottom:1px solid var(--line);overflow:visible}.dview .prevbox{min-height:260px}.dtabs{width:180px}}dialog::backdrop{background:rgba(0,0,0,.45)}
 dialog .hd{display:flex;justify-content:space-between;align-items:center;padding:12px var(--s3);border-bottom:1px solid var(--line);font-weight:650}dialog .bd{padding:var(--s3);display:flex;flex-direction:column;gap:12px}
 a.btn{text-decoration:none;color:var(--fg)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
@@ -162,25 +164,39 @@ body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
 </div>
 <footer class="status"><span id="st">Готово</span><span class="sp" style="flex:1"></span><span>Вне выделения модель не меняется (проверяется тестами)</span></footer>
 <iframe id="mfr" title="Части модели и ремеш" hidden></iframe>
-<dialog id="dlg" aria-labelledby="dlgt"><div class="hd"><span id="dlgt">Файл: импорт и экспорт</span><button class="btn" aria-label="Закрыть" onclick="$('dlg').close()">✕</button></div><div class="bd">
- <div><b>Предпросмотр</b>
-  <div class="prevbox" style="margin-top:6px"><canvas id="ppv" aria-label="Предпросмотр выбранной части или экспорта"></canvas><div class="pvmsg" id="ppm">Выберите часть в дереве или нажмите «Предпросмотр экспорта»</div></div>
-  <div class="row" style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><div class="seg" id="psh" role="group" aria-label="Отображение модели"><button id="psh-solid" aria-pressed="true" onclick="pvShade('solid')" title="Однотонная модель с подсветкой выделения">Сплошная</button><button id="psh-tex" aria-pressed="false" onclick="pvShade('tex')" title="С текстурой">Текстура</button><button id="psh-wire" aria-pressed="false" onclick="pvShade('wire')" title="Только рёбра сетки">Каркас</button></div><label class="btn"><input type="checkbox" id="pov" onchange="pvShade()"> Каркас поверх</label></div>
-  <div class="help" id="ppi"></div></div>
- <div><b>Экспорт</b><div class="help" id="xh" style="margin:4px 0 8px"></div>
-  <label class="btn" style="justify-content:flex-start;margin-bottom:8px"><input type="checkbox" id="xb" onchange="xlinks()"> Вместе с манекеном (тело)</label>
-  <div class="grid2"><a class="btn" id="x-glb" download>GLB (Blender, игра)</a><a class="btn" id="x-obj" download>OBJ</a><a class="btn" id="x-png" download>Текстура PNG</a><button class="btn" onclick="previewPart('__current__',$('xb').checked?'body':'head')" title="Показать в окне предпросмотра то, что попадёт в файл GLB, с текстурой">Предпросмотр экспорта</button><button class="btn" onclick="texExport()" title="Файлы work/head_edit.png и work/head_edit.obj на диске проекта">Сохранить в work/</button></div></div>
- <div><b>Импорт части</b><div class="help" style="margin:4px 0 8px">Три шага: 1) щёлкните часть в дереве (или загрузите свой файл); 2) выберите, как вставить; 3) «Открыть в редакторе». «Отменить» в шапке вернёт прежнюю сцену.</div>
-  <label class="btn" style="cursor:pointer;margin-bottom:8px">Загрузить файл с компьютера (.glb, .gltf, .obj)<input type="file" id="ifile" accept=".glb,.gltf,.obj" hidden onchange="upload(this.files[0])"></label>
-  <div class="fld"><div class="lb"><span>1. Что взять — дерево моделей</span></div>
+<dialog id="dlg" aria-labelledby="dlgt"><div class="hd"><span id="dlgt">Файл</span>
+ <div class="seg dtabs" id="dtabs" role="tablist" aria-label="Что делать"><button role="tab" id="dt-imp" aria-selected="true" onclick="dlgTab('imp')">Импорт</button><button role="tab" id="dt-exp" aria-selected="false" onclick="dlgTab('exp')">Экспорт</button></div>
+ <button class="btn" aria-label="Закрыть" onclick="$('dlg').close()">✕</button></div>
+<div class="dmain">
+ <section class="dside">
+  <div id="pn-imp" class="dpn">
+   <div class="help">1. Выберите часть в дереве (как в Blender: файл — «коллекция», части — объекты). Справа сразу виден её вид.</div>
+   <label class="btn" style="cursor:pointer">Загрузить файл с компьютера (.glb, .gltf, .obj)<input type="file" id="ifile" accept=".glb,.gltf,.obj" hidden onchange="upload(this.files[0])"></label>
    <div id="tree" class="tree" role="tree" aria-label="Источники, файлы и части"></div>
-   <div class="help">Раскройте группу → файл → часть и щёлкните часть. Как в Blender: файл — это «коллекция», части — объекты внутри неё.</div></div>
-  <div class="box" id="picked" aria-live="polite">Ничего не выбрано</div>
-  <div hidden><select id="dn" aria-label="Источник" onchange="loadParts()"></select><div id="dnh"></div><select id="dpart" aria-label="Часть файла"></select></div>
-  <div class="fld"><div class="lb"><span>2. Как вставить</span></div><select id="sc" aria-label="Как вставить"><option value="open">показать как есть (без манекена)</option><option value="match_ring">поставить на шею манекена</option><option value="keep">на шею, без масштаба</option></select><div class="help" id="sch">Часть открывается целиком, без манекена: так видно саму модель.</div></div>
-  <button class="btn primary wide" id="brp" onclick="rep()">3. Открыть в редакторе</button>
-  <div id="prog" hidden><div class="prog"><i id="pb"></i></div><div class="grid2" style="grid-template-columns:1fr auto;align-items:center;margin-top:8px"><span id="pm" class="help"></span><button class="btn" id="pc" onclick="cancelJob()">Отмена</button></div></div>
+   <div class="box" id="picked" aria-live="polite">Ничего не выбрано</div>
+   <div hidden><select id="dn" aria-label="Источник" onchange="loadParts()"></select><div id="dnh"></div><select id="dpart" aria-label="Часть файла"></select></div>
+   <div class="fld"><div class="lb"><span>2. Как вставить</span></div><select id="sc" aria-label="Как вставить"><option value="open">показать как есть (без манекена)</option><option value="match_ring">поставить на шею манекена</option><option value="keep">на шею, без масштаба</option></select><div class="help" id="sch">Часть открывается целиком, без манекена: так видно саму модель.</div></div>
+  </div>
+  <div id="pn-exp" class="dpn" hidden>
+   <div class="help" id="xh"></div>
+   <label class="btn" style="justify-content:flex-start"><input type="checkbox" id="xb" onchange="xlinks();previewExport()"> Вместе с манекеном (тело)</label>
+   <div class="help">Справа — то, что попадёт в файл. Выберите формат:</div>
+   <a class="btn primary" id="x-glb" download>GLB — Blender и игра</a>
+   <div class="grid2"><a class="btn" id="x-obj" download>OBJ</a><a class="btn" id="x-png" download>Текстура PNG</a></div>
+   <button class="btn" onclick="texExport()" title="Файлы work/head_edit.png и work/head_edit.obj на диске проекта">Сохранить в work/ на диске проекта</button>
+  </div>
+ </section>
+ <section class="dview">
+  <div class="prevbox"><canvas id="ppv" aria-label="Предпросмотр выбранной части или экспорта"></canvas><div class="pvmsg" id="ppm">Выберите часть в дереве слева</div>
+   <div class="pvbar"><div class="seg" id="psh" role="group" aria-label="Отображение модели"><button id="psh-solid" aria-pressed="true" onclick="pvShade('solid')" title="Однотонная модель с подсветкой выделения">Сплошная</button><button id="psh-tex" aria-pressed="false" onclick="pvShade('tex')" title="С текстурой">Текстура</button><button id="psh-wire" aria-pressed="false" onclick="pvShade('wire')" title="Только рёбра сетки">Каркас</button></div><label class="btn"><input type="checkbox" id="pov" onchange="pvShade()"> Рёбра</label></div></div>
+  <div class="help" id="ppi"></div>
+ </section>
+</div>
+<div class="dft" id="dft">
+ <div class="dmsg"><div id="prog" hidden><div class="prog"><i id="pb"></i></div><div class="grid2" style="grid-template-columns:1fr auto;align-items:center;margin-top:6px"><span id="pm" class="help"></span><button class="btn" id="pc" onclick="cancelJob()">Отмена</button></div></div>
   <div id="rrep" class="box" hidden></div><div id="sg0"></div></div>
+ <button class="btn" onclick="$('dlg').close()">Закрыть</button>
+ <button class="btn primary" id="brp" onclick="rep()">Открыть в редакторе</button>
 </div></dialog>
 <div id="toasts" aria-live="polite"></div>
 <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -345,6 +361,9 @@ async function upload(f){if(!f)return;if(f.size>64<<20){toast('Файл боль
  if(r.error){toast(r.error,'err');return}const st=await (await fetch('/api/edit/state')).json();fillSrc(st.sources,r.id);toast('Файл загружен: выберите нужную часть и нажмите «Импортировать»','ok')}
 function xlinks(){const b=$('xb').checked?'&body=1':'';for(const f of['glb','obj','png'])$('x-'+f).href='/api/edit/export?fmt='+f+(f=='glb'?b:'');$('xh').textContent=TI.available?'Модель с текущими правками формы, текстуры и UV.':'Только форма: у неё нет UV и текстуры.'}
 $('dlg').addEventListener('toggle',xlinks);xlinks();
+function previewExport(){previewPart('__current__',$('xb').checked?'body':'head')}
+function dlgTab(t){const e=t=='exp';$('pn-imp').hidden=e;$('pn-exp').hidden=!e;$('brp').hidden=e;$('dt-imp').setAttribute('aria-selected',!e);$('dt-exp').setAttribute('aria-selected',e);
+ if(e)previewExport();else if($('dn').value&&$('dpart').value)previewPart($('dn').value,$('dpart').value);else $('ppm').textContent='Выберите часть в дереве слева'}
 /* текстура и UV */
 async function tinfo(){const r=await (await fetch('/api/edit/tex_info')).json();if(!r.error)TI=r;sync()}
 function loadTexImg(){return new Promise(res=>{const im=new Image();im.onload=()=>{TX.width=im.width;TX.height=im.height;TX.getContext('2d').drawImage(im,0,0);if(ttex)ttex.needsUpdate=true;drawUV();res()};im.onerror=()=>res();im.src='/api/edit/texture.png?r='+Date.now()})}

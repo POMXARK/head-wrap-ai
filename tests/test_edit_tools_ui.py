@@ -10,7 +10,7 @@ for i in ('t-grab', 't-paint', 'v-mesh', 'v-tex', 'v-uv', 'uvc', 'sym', 'tmg', '
 for c in ("e.code", "KeyG", "KeyP"):
     assert c in h, c
 assert 'alert(' not in h
-assert len(re.findall(r'class="btn primary', h)) == 2
+assert len(re.findall(r'class="btn primary', h)) == 3
 assert "$('bum').disabled" in h or "$(b).disabled=!nsel" in h, 'UV buttons are disabled without a selection, with the reason in the text'
 assert 'У этой модели нет' in h
 print('PASS test_edit_tools_ui')

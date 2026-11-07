@@ -13,6 +13,6 @@ if __name__ == '__main__':
     for k in ('Esc', 'aria-pressed', 'aria-live'):
         assert k in h, k
     assert 'NOGL' in h, 'graceful fallback when WebGL is unavailable'
-    assert len(re.findall(r'class="btn primary', h)) == 2, 'one primary action per section (edit, replace)'
+    assert len(re.findall(r'class="btn primary', h)) == 3, 'one primary action per section (edit, replace, export)'
     assert 'disabled' in h and '$(\'ba\').disabled=!nsel' in h, 'Apply is disabled without a selection'
     print('test_edit_ui OK')
