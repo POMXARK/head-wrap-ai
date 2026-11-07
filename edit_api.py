@@ -138,13 +138,28 @@ def _resolve(name):
     raise ValueError('unknown donor ' + name)
 
 
+def _geoms(path):
+    """name -> mesh of a donor file with the node transforms applied (game GLBs keep scale/rotation in nodes)"""
+    import trimesh
+    sc = trimesh.load(path, force='scene')
+    out = {}
+    for node in sc.graph.nodes_geometry:
+        T, gname = sc.graph[node]
+        m = sc.geometry[gname].copy()
+        m.apply_transform(T)
+        out.setdefault(gname, m)
+    for k, v in sc.geometry.items():
+        out.setdefault(k, v)
+    return out
+
+
 def donor_parts(name):
     """[{name, vertices}] of the meshes inside a donor file (the user picks the head among them)"""
     import trimesh
     rel = _resolve(name)
     if rel is None:
         return [{'name': 'head', 'vertices': len(A.parts['head'].V) if A else 0}]
-    g = trimesh.load(os.path.join(HERE, rel), force='scene').geometry
+    g = _geoms(os.path.join(HERE, rel))
     out = []
     for k, v in g.items():
         ok = False
@@ -178,7 +193,7 @@ def _donor(name, part=None):
         vt, T, tex = texture.template_uv()
         return m.V, m.F, {'vt': vt, 'T': T, 'img': tex}
     import trimesh
-    geoms = trimesh.load(os.path.join(HERE, rel), force='scene').geometry
+    geoms = _geoms(os.path.join(HERE, rel))
     g = geoms[part] if part in geoms else (geoms['geometry_0'] if name == 'hero1' else max(geoms.values(), key=lambda x: len(x.vertices)))
     V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
     uv = getattr(g.visual, 'uv', None)
