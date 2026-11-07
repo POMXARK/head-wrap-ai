@@ -252,6 +252,43 @@ def _donor_ring(dV, dF):
     return max(loops, key=len)
 
 
+_PART_WORDS = [('arm_bottom', 'Предплечье'), ('arm_top', 'Плечо'), ('leg_bottom', 'Голень'), ('leg_top', 'Бедро'), ('hvostik', 'Хвост'),
+               ('head', 'Голова'), ('hand', 'Кисть'), ('foot', 'Стопа'), ('body', 'Торс'), ('palash', 'Палаш'), ('sword', 'Меч'),
+               ('hair', 'Волосы'), ('hat', 'Шляпа'), ('boot', 'Сапог'), ('belt', 'Пояс'), ('pistol', 'Пистолет'), ('eye', 'Глаз'),
+               ('cuirass', 'Кираса'), ('shirt', 'Рубаха'), ('scarf', 'Платок')]
+_LIMBS = ('Кисть', 'Плечо', 'Предплечье', 'Бедро', 'Голень', 'Стопа')
+
+
+def _part_labels(ms, names):
+    """readable names for the parts: the file names are generic (Cap_, Cap__1 ...), the texture names are not (hero_arm_top.tga ->
+    «Плечо»); a limb gets right/left by the sign of X (the model looks to -Z: +X is its right side). Returns [(title, texture)]"""
+    out = []
+    for m, nm in zip(ms, names):
+        mat = getattr(m.visual, 'material', None)
+        tex = str(getattr(mat, 'name', '') or '')
+        stem = tex.rsplit('.', 1)[0].lower()
+        title = next((ru for k, ru in _PART_WORDS if k in stem), None)
+        if title is None:
+            title = stem or nm
+        if title in _LIMBS or title in ('Стопа',):
+            x = float(np.asarray(m.vertices)[:, 0].mean())
+            if abs(x) > 0.02:
+                neut = title in ('Плечо', 'Предплечье', 'Бедро')
+                title += (' правое' if neut else ' правая') if x > 0 else (' левое' if neut else ' левая')
+        out.append([title, tex])
+    ys = [float(np.asarray(m.vertices)[:, 1].mean()) for m in ms]
+    for t in {o[0] for o in out}:
+        ix = [i for i, o in enumerate(out) if o[0] == t]
+        if len(ix) == 2:        # two parts with one texture: the upper and the lower one
+            lo, hi = sorted(ix, key=lambda i: ys[i])
+            out[lo][0] += ' (низ)'
+            out[hi][0] += ' (верх)'
+        elif len(ix) > 2:
+            for k, i in enumerate(sorted(ix, key=lambda i: ys[i])):
+                out[i][0] += ' %d' % (k + 1)
+    return out
+
+
 def _merge_all(ms, names=None):
     """every part of a file as one mesh with ONE texture: part textures go into a grid atlas (the editor holds one texture);
     a part without texture gets a flat cell of its colour. Returns (V, F, uvinfo)"""
@@ -263,10 +300,11 @@ def _merge_all(ms, names=None):
     atlas = Image.new('RGBA', (cols * cell, rows * cell), (200, 200, 200, 255))
     Vs, Fs, vts, Ts, o, ov, Ns = [], [], [], [], 0, 0, []
     parts = []
+    labels = _part_labels(ms, names or ['part%d' % i for i in range(n)])
     for i, m in enumerate(ms):
         if i:
             parts[-1][2] = o
-        parts.append([(names[i] if names else 'part%d' % i), o, None])
+        parts.append([(names[i] if names else 'part%d' % i), o, None] + labels[i])
         c, r = i % cols, i // cols
         mat = getattr(m.visual, 'material', None)
         img = getattr(mat, 'baseColorTexture', None) or getattr(mat, 'image', None)
