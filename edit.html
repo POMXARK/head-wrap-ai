@@ -167,7 +167,7 @@ body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
   <label class="btn" style="cursor:pointer;margin-bottom:8px">Загрузить файл с компьютера (.glb, .gltf, .obj)<input type="file" id="ifile" accept=".glb,.gltf,.obj" hidden onchange="upload(this.files[0])"></label>
   <div class="fld"><div class="lb"><span>1. Источник</span></div><select id="dn" aria-label="Источник" onchange="loadParts()"></select><div class="help" id="dnh"></div></div>
   <div class="fld"><div class="lb"><span>2. Часть файла</span></div><select id="dpart" aria-label="Часть файла"></select></div>
-  <div class="fld"><div class="lb"><span>Масштаб</span></div><select id="sc" aria-label="Масштаб"><option value="match_ring">по кольцу шеи</option><option value="keep">не менять</option></select></div>
+  <div class="fld"><div class="lb"><span>Как вставить</span></div><select id="sc" aria-label="Масштаб"><option value="open">показать как есть (без манекена)</option><option value="match_ring">поставить на шею манекена</option><option value="keep">на шею, без масштаба</option></select></div>
   <button class="btn primary wide" id="brp" onclick="rep()">3. Импортировать</button>
   <div id="prog" hidden><div class="prog"><i id="pb"></i></div><div class="grid2" style="grid-template-columns:1fr auto;align-items:center;margin-top:8px"><span id="pm" class="help"></span><button class="btn" id="pc" onclick="cancelJob()">Отмена</button></div></div>
   <div id="rrep" class="box" hidden></div><div id="sg0"></div></div>
@@ -277,7 +277,7 @@ async function rep(){const r=await post('replace_job',{donor:$('dn').value,part:
   if(j.status=='running'){await new Promise(r=>setTimeout(r,150));continue}
   JOB=null;$('brp').disabled=false;$('pc').hidden=true;if(j.status=='done')$('prog').hidden=true;
   if(j.status=='done'){const q=j.result.report;$('rrep').hidden=false;
-   $('rrep').textContent='Масштаб ×'+q.scale.toFixed(2)+', несовпадение кольца '+(q.ring_gap*100).toFixed(0)+'% радиуса'+(q.neck_cut?'. Донор был закрытой фигурой — место стыка обрезано автоматически':'')+(q.seam_stretch?', шов сшит полосой (длиннейшее ребро ×'+q.seam_stretch+' радиуса)':'');await reloadMesh(true);refresh();$('dlg').close();toast('Часть импортирована. Не нравится — «Отменить» в шапке','ok');setSt('Готово')}
+   $('rrep').textContent=$('sc').value=='open'?'Модель открыта как есть':'Масштаб ×'+q.scale.toFixed(2)+', несовпадение кольца '+(q.ring_gap*100).toFixed(0)+'% радиуса'+(q.neck_cut?'. Донор был закрытой фигурой — место стыка обрезано автоматически':'')+(q.seam_stretch?', шов сшит полосой (длиннейшее ребро ×'+q.seam_stretch+' радиуса)':'');await reloadMesh(true);refresh();$('dlg').close();toast('Часть импортирована. Не нравится — «Отменить» в шапке','ok');setSt('Готово')}
   else if(j.status=='error'){toast(j.error,'err');setSt('Ошибка')}
   else{toast('Замена отменена');setSt('Отменено')}
   return}}

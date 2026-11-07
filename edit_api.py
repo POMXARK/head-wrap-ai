@@ -28,6 +28,19 @@ def _init():
         A.add_part('body', *_mannequin(m))
 
 
+def _body_visible():
+    """the mannequin is shown unless the last replace_part opened a model as is (scale 'open')"""
+    last = [r for r in A.log if r['op'] == 'replace_part']
+    return not (last and last[-1]['params'].get('scale') == 'open')
+
+
+def _body():
+    if _body_visible():
+        b = A.parts['body']
+        return b.V, b.F
+    return np.zeros((0, 3)), np.zeros((0, 3), int)
+
+
 def _mannequin(head):
     """a simple body (ours, a stand-in until a real torso asset exists): a tube under the neck ring of the template head,
     its top ring IS the neck ring, widening to shoulders"""
@@ -243,7 +256,7 @@ def export_bytes(fmt, body=False):
     else:
         mh = trimesh.Trimesh(h.V, h.F, process=False)
     sc.add_geometry(mh, node_name='head', geom_name='head')
-    if body:
+    if body and _body_visible():
         b = A.parts['body']
         sc.add_geometry(trimesh.Trimesh(b.V, b.F, process=False), node_name='body', geom_name='body')
     return sc.export(file_type='glb'), 'model/gltf-binary', 'head_edit.glb'
@@ -299,6 +312,9 @@ def replace_prepare(d, step=lambda msg, frac: None):
         time.sleep(slow)
     step('читаю донора', 0.1)
     dV, dF, uvinfo = _donor(d['donor'], d.get('part'))
+    if d.get('scale') == 'open':      # show the model in the editor as it is: no mannequin, no neck, nothing is cut or scaled
+        uv = {'vt': uvinfo['vt'], 'T': uvinfo['T'], 'img': uvinfo['img']} if uvinfo is not None else None
+        return {'hV': dV, 'hF': dF, 'rep': {'ring_gap': 0.0, 'scale': 1.0}, 'd': d, 'seam': 'none', 'uv': uv}
     dV, dF, uvinfo, cut = open_neck(dV, dF, uvinfo)
     body = A.parts['body']
     step('ищу кольца розетки', 0.35)
@@ -379,9 +395,10 @@ def state():
 def mesh():
     """head first (its vertex ids are the selection ids), then the body; nhead tells where the head ends"""
     _init()
-    h, b = A.parts['head'], A.parts['body']
-    V = np.vstack([h.V, b.V])
-    F = np.vstack([h.F, b.F + len(h.V)])
+    h = A.parts['head']
+    bV, bF = _body()
+    V = np.vstack([h.V, bV])
+    F = np.vstack([h.F, bF + len(h.V)])
     return {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(h.V), 'nfhead': len(h.F)}
 
 
@@ -402,11 +419,11 @@ def before():
     if not A._undo or A._undo[-1][0] != 'head':
         return {'none': True}
     V0, F0 = A._undo[-1][1]
-    b = A.parts['body']
+    bV, bF = _body()
     h = A.parts['head']
     moved = float(np.linalg.norm(V0 - h.V, axis=1).max()) if len(V0) == len(h.V) else None
-    V = np.vstack([V0, b.V])
-    F = np.vstack([F0, b.F + len(V0)])
+    V = np.vstack([V0, bV])
+    F = np.vstack([F0, bF + len(V0)])
     return {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(V0), 'nfhead': len(F0),
             'op': A.log[-1]['op'], 'max_move': moved}
 
