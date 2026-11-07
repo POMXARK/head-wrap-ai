@@ -97,6 +97,9 @@ REVIEW = open(os.path.join(HERE, 'review.html'), encoding='utf-8').read()
 MODEL = open(os.path.join(HERE, 'model.html'), encoding='utf-8').read()
 
 
+JOBS = {}
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -194,6 +197,11 @@ class H(BaseHTTPRequestHandler):
             self.send(MODEL, 'text/html')
         elif path == '/api/model':
             import model
+            jq = urllib.parse.parse_qs(q).get('job', [''])[0]
+            if jq:
+                j = JOBS.get(jq) or {'state': 'done', 'ok': False, 'error': 'unknown job'}
+                self.send(dict(j, elapsed=round(time.time() - j.get('t0', time.time()), 1)))
+                return
             f = urllib.parse.parse_qs(q).get('f', [''])[0]
             if f:
                 f = os.path.realpath(f if os.path.isabs(f) else os.path.join(HERE, f))
@@ -250,22 +258,29 @@ class H(BaseHTTPRequestHandler):
                 if not r.startswith(HERE + os.sep) or (k == 'out' and not r.endswith('.glb')):
                     raise ValueError('path outside the project / not .glb: ' + d[k])
                 return r
-            if d['op'] == 'replace':
-                out = model.replace(t('target'), d['node'], t('source'), d.get('snode') or None, d.get('out') and t('out'))
-            elif d['op'] == 'add':
-                out = model.add(t('target'), t('source'), d['snode'], d.get('name') or None, d.get('out') and t('out'))
-            elif d['op'] == 'remesh':
-                out = model.remesh(t('target'), d['node'], int(d['faces']) if d.get('faces') else None,
-                                   float(d['edge']) if d.get('edge') else None, int(d.get('subdivide') or 0),
-                                   out=d.get('out') and t('out'))
-            elif d['op'] == 'uv':
-                out = model.new_uv(t('target'), d['node'], out=d.get('out') and t('out'))
-            elif d['op'] == 'remove':
-                out = model.remove(t('target'), d['node'], d.get('out') and t('out'))
-            else:
-                self.send_error(400)
-                return
-            self.send({'ok': True, 'out': os.path.relpath(out, HERE)})
+            def work():
+                try:
+                    if d['op'] == 'replace':
+                        out = model.replace(t('target'), d['node'], t('source'), d.get('snode') or None, d.get('out') and t('out'))
+                    elif d['op'] == 'add':
+                        out = model.add(t('target'), t('source'), d['snode'], d.get('name') or None, d.get('out') and t('out'))
+                    elif d['op'] == 'remesh':
+                        out = model.remesh(t('target'), d['node'], int(d['faces']) if d.get('faces') else None,
+                                           float(d['edge']) if d.get('edge') else None, int(d.get('subdivide') or 0),
+                                           out=d.get('out') and t('out'))
+                    elif d['op'] == 'uv':
+                        out = model.new_uv(t('target'), d['node'], out=d.get('out') and t('out'))
+                    elif d['op'] == 'remove':
+                        out = model.remove(t('target'), d['node'], d.get('out') and t('out'))
+                    else:
+                        raise ValueError('unknown op')
+                    JOBS[jid].update(state='done', ok=True, out=os.path.relpath(out, HERE))
+                except Exception as e:  # noqa: BLE001
+                    JOBS[jid].update(state='done', ok=False, error=str(e))
+            jid = '%d' % (time.time() * 1000)
+            JOBS[jid] = {'state': 'run', 't0': time.time(), 'op': d['op']}
+            threading.Thread(target=work, daemon=True).start()  # remesh with a texture takes minutes: poll /api/model?job=
+            self.send({'job': jid})
             return
         if self.path.startswith('/api/edit/upload'):
             import edit_api

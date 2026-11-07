@@ -180,9 +180,9 @@ def transfer_texture(old, new_V, new_F, new_uv, size):
             pts.append(l1[ok, None] * new_V[f[0]] + l2[ok, None] * new_V[f[1]] + l3[ok, None] * new_V[f[2]])
             texel.append(P[ok].astype(int))
     pts, texel = np.vstack(pts), np.vstack(texel)
-    _, _, tri = closest_point(old, pts)
+    near, _, tri = closest_point(old, pts)  # once: it is the slow step
     ouv = old.visual.uv[old.faces[tri]]
-    bary = points_to_barycentric(old.triangles[tri], closest_point(old, pts)[0])
+    bary = points_to_barycentric(old.triangles[tri], near)
     u = (bary[:, :, None] * ouv).sum(1)
     px = np.clip(u[:, 0] * sw, 0, sw - 1).astype(int)
     py = np.clip((1 - u[:, 1]) * sh, 0, sh - 1).astype(int)
@@ -193,6 +193,12 @@ def transfer_texture(old, new_V, new_F, new_uv, size):
     idx = ndi.distance_transform_edt(~have, return_distances=False, return_indices=True)  # pad over the seams
     out = out[idx[0], idx[1]]
     return Image.fromarray(out)
+
+
+def auto_size(g, size=None):
+    """texture size of the result: asked, else that of the old texture (2048 at most) - no point in more texels than there were"""
+    t = _texture(g)
+    return int(size) if size else (min(2048, max(t.size)) if t is not None else 1024)
 
 
 def _unwrap(V, F, size):
@@ -215,7 +221,7 @@ def _edit_part(target, node, fn, out, suffix, **logkw):
     return out
 
 
-def remesh(target, node, faces=None, edge=None, subdivide=0, texture=True, size=2048, out=None):
+def remesh(target, node, faces=None, edge=None, subdivide=0, texture=True, size=None, out=None):
     """New topology of a part; with texture=True a new UV (xatlas) and the old texture carried over."""
     def fn(g):
         import fast_simplification
@@ -235,16 +241,18 @@ def remesh(target, node, faces=None, edge=None, subdivide=0, texture=True, size=
         print(f'{len(g.faces)} -> {len(F)} triangles')
         if not texture or _texture(old) is None:
             return trimesh.Trimesh(V, F, process=False)
-        V2, F2, uv = _unwrap(V, F, size)
-        img = transfer_texture(old, V2, F2, uv, size)
+        size_ = auto_size(old, size)
+        V2, F2, uv = _unwrap(V, F, size_)
+        img = transfer_texture(old, V2, F2, uv, size_)
         return _with_texture(trimesh.Trimesh(V2, F2, process=False), uv, img)
     return _edit_part(target, node, fn, out, 'remesh', faces=faces, edge=edge, subdivide=subdivide)
 
 
-def new_uv(target, node, size=2048, out=None):
+def new_uv(target, node, size=None, out=None):
     def fn(g):
-        V2, F2, uv = _unwrap(np.asarray(g.vertices), np.asarray(g.faces), size)
-        img = transfer_texture(g, V2, F2, uv, size) if _texture(g) is not None else None
+        size_ = auto_size(g, size)
+        V2, F2, uv = _unwrap(np.asarray(g.vertices), np.asarray(g.faces), size_)
+        img = transfer_texture(g, V2, F2, uv, size_) if _texture(g) is not None else None
         n = trimesh.Trimesh(V2, F2, process=False)
         return _with_texture(n, uv, img) if img is not None else n
     return _edit_part(target, node, fn, out, 'uv', size=size)
@@ -310,7 +318,7 @@ def main():
     ap.add_argument('--faces', type=int)
     ap.add_argument('--edge', type=float)
     ap.add_argument('--subdivide', type=int, default=0)
-    ap.add_argument('--size', type=int, default=2048)
+    ap.add_argument('--size', type=int, default=None)
     ap.add_argument('--no-texture', action='store_true')
     a = ap.parse_args()
     x = a.args

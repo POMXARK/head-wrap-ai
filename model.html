@@ -92,7 +92,7 @@ const opts=a=>a.map(x=>`<option>${esc(x)}</option>`).join('');
 async function init(){PV=PV||Viewer($('pv'),$('pvc'),pick);SV=SV||Viewer($('sv'),$('svc'),n=>{if(n){$('sn').value=n;spick()}});const cur=$('f').value;FILES=(await (await fetch('/api/model')).json()).files;$('f').innerHTML=$('sf').innerHTML=opts(FILES);if(FILES.includes(cur))$('f').value=cur;await show();await sparts()}
 async function show(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('f').value))).json();$('tg').textContent=$('f').value;
 PARTS=r.parts.map(p=>p.node);PINFO={};r.parts.forEach(p=>PINFO[p.node]=p);$('t').innerHTML='<table><thead><tr><th>Часть</th><th>Вершин</th><th>Треугольников</th><th>UV</th><th>Текстура</th><th>Габариты (min … max)</th></tr></thead><tbody>'+r.parts.map(p=>`<tr data-n="${esc(p.node)}" tabindex="0" onclick="pick(this.dataset.n)" onkeydown="if(event.key=='Enter')pick(this.dataset.n)"><td><b>${esc(p.node)}</b></td><td>${p.vertices}</td><td>${p.triangles}</td><td>${p.uv?'да':'нет'}</td><td>${p.texture?p.texture.join('×'):'—'}</td><td>${esc(p.bbox_min)} … ${esc(p.bbox_max)}</td></tr>`).join('')+'</tbody></table>';
-$('n').innerHTML=opts(PARTS);est();$('pvc').textContent='Вся модель';if(PV&&PV.load){PV.sel=null;await PV.load($('f').value,PARTS)}}
+const kn=$('n').value;$('n').innerHTML=opts(PARTS);if(PARTS.includes(kn))$('n').value=kn;est();$('pvc').textContent='Вся модель';if(PV&&PV.load){PV.sel=null;await PV.load($('f').value,PARTS)}}
 async function sparts(){const r=await (await fetch('/api/model?f='+encodeURIComponent($('sf').value))).json();$('sn').innerHTML=opts(r.parts.map(p=>p.node));if(SV&&SV.load){SV.sel=$('sn').value;await SV.load($('sf').value,r.parts.map(p=>p.node));$('svc').textContent='Источник: '+$('sn').value}}
 function est(){const p=PINFO[$('n').value],e=$('est');if(!p){e.textContent='Что получится: выберите часть выше.';return}
  const f=+$('fc').value,d=+$('sd').value,l=+$('ed').value;let t;
@@ -104,15 +104,18 @@ function est(){const p=PINFO[$('n').value],e=$('est');if(!p){e.textContent='Чт
 ['fc','ed','sd','n'].forEach(i=>$(i).addEventListener('input',est));$('n').addEventListener('change',est);
 const NAMES={replace:'Замена',add:'Добавление',remove:'Удаление',remesh:'Ремеш',uv:'Новая UV'};
 async function back(f){$('f').value=f;await show();$('res').hidden=true;toast('Открыт исходный файл '+f,'ok')}
-async function go(op){const bs=document.querySelectorAll('.acts .btn');bs.forEach(b=>b.disabled=true);$('st').textContent='Выполняю: '+NAMES[op]+'… ремеш с UV и текстурой может занять несколько минут, не закрывайте страницу';
+async function go(op){const bs=document.querySelectorAll('.acts .btn');bs.forEach(b=>b.disabled=true);$('st').textContent='Выполняю: '+NAMES[op]+'…';
  const src=$('f').value,node=$('n').value,before=PINFO[node];
  try{const r=await fetch('/api/model',{method:'POST',body:JSON.stringify({op,target:src,node,source:$('sf').value,snode:$('sn').value,out:$('o').value,faces:$('fc').value,edge:$('ed').value,subdivide:$('sd').value})});
-  const j=await r.json().catch(()=>({}));$('res').hidden=false;
+  let j=await r.json().catch(()=>({}));$('res').hidden=false;
+  if(j.job){const id=j.job;for(;;){await new Promise(z=>setTimeout(z,1000));const q=await (await fetch('/api/model?job='+id)).json();
+   $('st').textContent='Выполняю: '+NAMES[op]+'… прошло '+Math.round(q.elapsed)+' с (ремеш с текстурой — от секунд до нескольких минут, страницу можно не закрывать)';
+   if(q.state=='done'){j=q.ok?{out:q.out}:{err:q.error};break}}}
   if(j.out){await init();let cmp='';
    if(FILES.includes(j.out)){$('f').value=j.out;await show();const a=PINFO[node];
     if(before&&a)cmp='<br>Часть «'+esc(node)+'»: было '+before.triangles+' треугольников и '+before.vertices+' вершин → стало '+a.triangles+' и '+a.vertices+'. Новая модель уже в превью выше.'}
    $('res').innerHTML='<p><b>Готово.</b> Новый файл: <code>'+esc(j.out)+'</code>. Исходный <code>'+esc(src)+'</code> не изменён.'+cmp+'</p><div class="acts"><button class="btn" onclick="back(\''+esc(src)+'\')">Вернуться к исходному</button></div>';toast(NAMES[op]+': готово → '+j.out,'ok')}
-  else{$('res').innerHTML='<p><b style="color:var(--err)">Не получилось.</b> Проверьте, что выбрана часть, а для ремеша заполнено одно из полей. Ничего не изменено.</p>';toast(NAMES[op]+': ошибка','err')}
+  else{$('res').innerHTML='<p><b style="color:var(--err)">Не получилось.</b> '+(j.err?'Причина: '+esc(j.err)+'. ':'Проверьте, что выбрана часть, а для ремеша заполнено одно из полей. ')+'Ничего не изменено.</p>';toast(NAMES[op]+': ошибка','err')}
  }catch(e){toast('Сервер не ответил','err')}
  bs.forEach(b=>b.disabled=false);$('st').textContent='Готово'}
 init()

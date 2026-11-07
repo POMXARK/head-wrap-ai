@@ -2,3 +2,4 @@ work/
 __pycache__/
 fold_profile.png
 journal/edits.jsonl
+journal/model_log.jsonl
