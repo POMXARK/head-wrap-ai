@@ -148,7 +148,7 @@ def donor_parts(name):
     out = []
     for k, v in g.items():
         ok = False
-        if len(v.vertices) >= 300:
+        if len(v.vertices) >= 30:
             try:
                 _donor_ring(*_donor(name, k)[:2])
                 ok = True
@@ -234,23 +234,44 @@ def export_bytes(fmt, body=False):
     return sc.export(file_type='glb'), 'model/gltf-binary', 'head_edit.glb'
 
 
+def _slice_open(dV, dF, cut):
+    """geometry cut by the plane y=cut (keeps the part above, leaves an open edge along the cut); UV is dropped"""
+    import trimesh
+    m = trimesh.Trimesh(dV, dF, process=False)
+    m = m.slice_plane([0, cut, 0], [0, 1, 0], cap=False)
+    if len(m.faces) < 3:
+        return None
+    m.merge_vertices()
+    m.remove_unreferenced_vertices()
+    return np.asarray(m.vertices, float), np.asarray(m.faces, int)
+
+
 def open_neck(dV, dF, uvinfo, frac=0.12):
-    """a closed donor head (game models, scans) has no neck opening to join the body: cut it off below `frac` of its height (ours);
-    returns (V, F, uvinfo, cut_y or None). Faces keep their order, so the donor UV stays valid."""
+    """any model can be a donor head. No neck opening (closed head, scan, loose pieces)? cut it off at the bottom (ours):
+    first dropping faces (UV stays valid), then by a real plane cut (UV lost). Returns (V, F, uvinfo, cut_y or None)."""
     if RP.boundary_loops(dF):
         return dV, dF, uvinfo, None
     y = dV[:, 1]
-    cut = float(y.min() + frac * (y.max() - y.min()))
-    keep = dV[dF][:, :, 1].mean(1) >= cut
-    if keep.sum() < 100:
-        raise ValueError('у головы нет отверстия шеи, обрезать нечего')
-    nF = dF[keep]
-    used = np.unique(nF)
-    remap = np.full(len(dV), -1)
-    remap[used] = np.arange(len(used))
-    if uvinfo is not None:
-        uvinfo = dict(uvinfo, T=np.asarray(uvinfo['T'])[keep])
-    return dV[used], remap[nF], uvinfo, cut
+    lo, h = float(y.min()), float(y.max() - y.min())
+    for fr in (frac, 0.2, 0.3):
+        cut = lo + fr * h
+        keep = dV[dF][:, :, 1].mean(1) >= cut
+        if keep.sum() < 3:
+            continue
+        nF = dF[keep]
+        used = np.unique(nF)
+        remap = np.full(len(dV), -1)
+        remap[used] = np.arange(len(used))
+        nV, nF = dV[used], remap[nF]
+        if RP.boundary_loops(nF):
+            if uvinfo is not None:
+                uvinfo = dict(uvinfo, T=np.asarray(uvinfo['T'])[keep])
+            return nV, nF, uvinfo, cut
+    for fr in (frac, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7):
+        r = _slice_open(dV, dF, lo + fr * h)
+        if r is not None and RP.boundary_loops(r[1]):
+            return r[0], r[1], None, lo + fr * h
+    raise ValueError('не удалось получить отверстие шеи: в модели нет подходящей поверхности')
 
 
 def replace_prepare(d, step=lambda msg, frac: None):
