@@ -188,7 +188,7 @@ body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
  </section>
  <section class="dview">
   <div class="prevbox"><canvas id="ppv" aria-label="Предпросмотр выбранной части или экспорта"></canvas><div class="pvmsg" id="ppm">Выберите часть в дереве слева</div>
-   <div class="pvbar"><div class="seg" id="psh" role="group" aria-label="Отображение модели"><button id="psh-solid" aria-pressed="true" onclick="pvShade('solid')" title="Однотонная модель с подсветкой выделения">Сплошная</button><button id="psh-tex" aria-pressed="false" onclick="pvShade('tex')" title="С текстурой">Текстура</button><button id="psh-wire" aria-pressed="false" onclick="pvShade('wire')" title="Только рёбра сетки">Каркас</button></div><label class="btn"><input type="checkbox" id="pov" onchange="pvShade()"> Рёбра</label></div></div>
+   <div class="pvbar"><div class="seg" id="psh" role="group" aria-label="Отображение модели"><button id="psh-solid" aria-pressed="true" onclick="pvShade('solid')" title="Однотонная модель с подсветкой выделения">Сплошная</button><button id="psh-tex" aria-pressed="false" onclick="pvShade('tex')" title="С текстурой">Текстура</button><button id="psh-wire" aria-pressed="false" onclick="pvShade('wire')" title="Только рёбра сетки">Каркас</button></div><label class="btn"><input type="checkbox" id="pov" onchange="pvShade()"> Рёбра</label><button class="btn" onclick="pvTurn()" title="Повернуть на 180° (у игровых моделей перед часто смотрит от камеры)">⟲ 180°</button></div></div>
   <div class="help" id="ppi"></div>
  </section>
 </div>
@@ -333,6 +333,7 @@ function pvInit(){if(PV)return PV;const cv=$('ppv');let r;try{r=new THREE.WebGLR
  (function loop(){requestAnimationFrame(loop);if(!$('dlg').open)return;const w=cv.clientWidth,h=cv.clientHeight;if(w&&(cv.width!=w||cv.height!=h)){r.setSize(w,h,false);c.aspect=w/h;c.updateProjectionMatrix()}r.render(s,c)})();return PV}
 let pvSeq=0;
 let pvShadeK='solid';
+function pvTurn(){if(!PV)return;const p=PV.c.position,t=PV.o.target;p.x=2*t.x-p.x;p.z=2*t.z-p.z;PV.o.update()}
 function pvShade(k){const v=PV;if(k)pvShadeK=k;const ov=$('pov').checked;if(!v||!v.m)return;const t=pvShadeK=='tex'&&v.mats.tex;
  for(const x of['solid','tex','wire'])$('psh-'+x).setAttribute('aria-pressed',x==pvShadeK);
  v.m.material=t?v.mats.tex:v.mats.solid;v.m.material.wireframe=pvShadeK=='wire';
@@ -349,7 +350,7 @@ async function previewPart(id,name){const v=pvInit();if(!v)return;const my=++pvS
  v.mats={solid,tex:tm};v.m=new THREE.Mesh(g,solid);v.s.add(v.m);
  for(const x of['solid','tex','wire']){const bt=$('psh-'+x);if(x=='tex'){bt.disabled=!d.tex;bt.title=d.tex?'С текстурой':'У этой части нет текстуры'}}
  pvShadeK=d.tex?'tex':(pvShadeK=='tex'?'solid':pvShadeK);pvShade();
- const R=Math.max(...d.size)/2||1;v.c.position.set(0,R*.4,R*4.4);v.o.target.set(0,0,0);v.o.update();$('ppm').textContent='';
+ const R=Math.max(...d.size)/2||1;v.c.position.set(0,R*.35,R*3.5);v.o.target.set(0,0,0);v.o.update();$('ppm').textContent='';
  $('ppi').textContent=d.faces+' треугольников · габариты '+d.size.join(' × ')+(d.tex?' · с текстурой':' · без текстуры')}
 function pickPart(id,name){previewPart(id,name);if(!PARTS[id])return;$('dn').value=id;$('dpart').innerHTML=PARTS[id].map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>').join('');$('dpart').value=name;
  $('tree').querySelectorAll('.prt').forEach(b=>b.setAttribute('aria-pressed',b.closest('details.fl').dataset.src==id&&b.dataset.p==name));

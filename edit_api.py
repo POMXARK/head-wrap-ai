@@ -223,8 +223,18 @@ def _merge_all(ms):
         if uv is not None and len(uv) == len(m.vertices) and img is not None:
             atlas.paste(img.convert('RGB').resize((cell, cell)), box)
             u = np.asarray(uv, float)
-            if u.min() < 0 or u.max() > 1:
-                u = np.mod(u, 1.0)
+            f0 = np.asarray(m.faces, int)
+            cu = u[f0]                                    # (F,3,2) per-corner uv: a tiled triangle is shifted as a whole, not per vertex
+            cu = cu - np.floor(cu.min(1, keepdims=True))   # into the unit square without tearing triangles that cross the border
+            cu = np.clip(cu, 0, 1)
+            cu = 0.002 + cu * 0.996                       # keep off the cell border: no bleeding from the neighbour cell
+            vts.append(np.c_[(c + cu[..., 0].ravel()) / cols, (r + cu[..., 1].ravel()) / rows])
+            Ts.append(np.arange(len(f0) * 3).reshape(-1, 3) + ov)
+            ov += len(f0) * 3
+            Vs.append(np.asarray(m.vertices, float))
+            Fs.append(f0 + o)
+            o += len(m.vertices)
+            continue
         else:
             col = (200, 200, 200)
             try:
@@ -232,12 +242,12 @@ def _merge_all(ms):
             except Exception:
                 pass
             atlas.paste(Image.new('RGB', (cell, cell), col), box)
-            u = np.full((len(m.vertices), 2), 0.5)
-        vts.append(np.c_[(c + u[:, 0]) / cols, (r + u[:, 1]) / rows])
+        f0 = np.asarray(m.faces, int)
+        vts.append(np.c_[np.full(len(f0) * 3, (c + 0.5) / cols), np.full(len(f0) * 3, (r + 0.5) / rows)])
+        Ts.append(np.arange(len(f0) * 3).reshape(-1, 3) + ov)
+        ov += len(f0) * 3
         Vs.append(np.asarray(m.vertices, float))
-        f = np.asarray(m.faces, int)
-        Fs.append(f + o)
-        Ts.append(f + o)
+        Fs.append(f0 + o)
         o += len(m.vertices)
     V, inv = np.unique(np.vstack(Vs).round(6), axis=0, return_inverse=True)
     F = np.vstack(Fs)
@@ -343,7 +353,7 @@ def part_texture_png(src, part):
         from PIL import Image
         im = Image.fromarray(np.asarray(im))
     im = im.convert('RGB')
-    im.thumbnail((1024, 1024))
+    im.thumbnail((2560, 2560))
     o = io.BytesIO()
     im.save(o, 'PNG')
     return o.getvalue()
