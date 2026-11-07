@@ -145,7 +145,29 @@ def donor_parts(name):
     if rel is None:
         return [{'name': 'head', 'vertices': len(A.parts['head'].V) if A else 0}]
     g = trimesh.load(os.path.join(HERE, rel), force='scene').geometry
-    return [{'name': k, 'vertices': int(len(v.vertices))} for k, v in g.items()]
+    out = []
+    for k, v in g.items():
+        ok = False
+        if len(v.vertices) >= 300:
+            try:
+                _donor_ring(*_donor(name, k)[:2])
+                ok = True
+            except Exception:
+                pass
+        out.append({'name': k, 'vertices': int(len(v.vertices)), 'ok': ok})
+    return out
+
+
+def _donor_ring(dV, dF):
+    """the neck hole of a donor head (opens a closed head at the bottom if needed); ValueError if there is none"""
+    try:
+        dV, dF, _, _ = open_neck(dV, dF, None)
+        loops = RP.boundary_loops(dF)
+    except ValueError:
+        loops = []
+    if not loops:
+        raise ValueError('в этой части нет головы с отверстием шеи (это волосы, одежда или деталь). Выберите в списке часть, помеченную «подходит»')
+    return max(loops, key=len)
 
 
 def _donor(name, part=None):
@@ -212,6 +234,25 @@ def export_bytes(fmt, body=False):
     return sc.export(file_type='glb'), 'model/gltf-binary', 'head_edit.glb'
 
 
+def open_neck(dV, dF, uvinfo, frac=0.12):
+    """a closed donor head (game models, scans) has no neck opening to join the body: cut it off below `frac` of its height (ours);
+    returns (V, F, uvinfo, cut_y or None). Faces keep their order, so the donor UV stays valid."""
+    if RP.boundary_loops(dF):
+        return dV, dF, uvinfo, None
+    y = dV[:, 1]
+    cut = float(y.min() + frac * (y.max() - y.min()))
+    keep = dV[dF][:, :, 1].mean(1) >= cut
+    if keep.sum() < 100:
+        raise ValueError('у головы нет отверстия шеи, обрезать нечего')
+    nF = dF[keep]
+    used = np.unique(nF)
+    remap = np.full(len(dV), -1)
+    remap[used] = np.arange(len(used))
+    if uvinfo is not None:
+        uvinfo = dict(uvinfo, T=np.asarray(uvinfo['T'])[keep])
+    return dV[used], remap[nF], uvinfo, cut
+
+
 def replace_prepare(d, step=lambda msg, frac: None):
     """the heavy part of replace_head: builds the new head mesh without touching the asset; step() may raise Cancelled"""
     _init()
@@ -222,11 +263,12 @@ def replace_prepare(d, step=lambda msg, frac: None):
         time.sleep(slow)
     step('читаю донора', 0.1)
     dV, dF, uvinfo = _donor(d['donor'], d.get('part'))
+    dV, dF, uvinfo, cut = open_neck(dV, dF, uvinfo)
     body = A.parts['body']
     step('ищу кольца розетки', 0.35)
     bl = RP.boundary_loops(body.F)
     t_ring = max(bl, key=lambda l: body.V[l][:, 1].mean())
-    d_ring = max(RP.boundary_loops(dF), key=len)
+    d_ring = _donor_ring(dV, dF)
     step('совмещаю голову с шеей', 0.55)
     V, F, rep = RP.replace(body.V, body.F, t_ring, dV, dF, d_ring, d.get('scale', 'match_ring'), outward=[0, 1, 0])
     off = rep['donor_offset']
@@ -240,6 +282,8 @@ def replace_prepare(d, step=lambda msg, frac: None):
         strip, stretch = RP.bridge(hV, d_ring, ring_copy)
         hF = np.vstack([hF, strip])
         rep['seam_stretch'] = round(stretch, 3)
+    if cut is not None:
+        rep['neck_cut'] = 1
     step('готово к применению', 0.95)
     uv = None
     if uvinfo is not None and np.array_equal(hF[:len(dF)], dF):    # donor faces keep their order; the bridge strip gets a dummy UV
