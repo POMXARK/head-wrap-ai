@@ -269,14 +269,25 @@ def _merge_all(ms):
         uv = getattr(m.visual, 'uv', None)
         box = (c * cell, (rows - 1 - r) * cell)
         if uv is not None and len(uv) == len(m.vertices) and img is not None:
-            atlas.paste(img.convert('RGBA').resize((cell, cell)), box)
             u = np.asarray(uv, float)
             f0 = np.asarray(m.faces, int)
             keep = _alpha_keep(m, img, uv)
             if keep is not None and keep.any():
                 f0 = f0[keep]
-            cu = u[f0]                                    # (F,3,2) per-corner uv: a tiled triangle is shifted as a whole, not per vertex
-            cu = cu - np.floor(cu.min(1, keepdims=True))   # into the unit square without tearing triangles that cross the border
+            cu = u[f0]                                    # (F,3,2) per-corner uv
+            lo = np.floor(cu.reshape(-1, 2).min(0) + 1e-6)
+            hi = np.ceil(cu.reshape(-1, 2).max(0) - 1e-6)
+            nt = np.clip(hi - lo, 1, 4).astype(int)       # the file repeats the texture (UV outside 0..1): lay the tiles side by side in the cell
+            rgba = img.convert('RGBA')
+            if (nt > 1).any():
+                tile = rgba.resize((cell // nt[0], cell // nt[1]))
+                for ix in range(nt[0]):
+                    for iy in range(nt[1]):
+                        atlas.paste(tile, (box[0] + ix * (cell // nt[0]), box[1] + iy * (cell // nt[1])))
+                cu = (cu - lo) / nt
+            else:
+                atlas.paste(rgba.resize((cell, cell)), box)
+                cu = cu - np.floor(cu.min(1, keepdims=True))   # a triangle that crosses the border is shifted as a whole
             cu = np.clip(cu, 0, 1)
             cu = 0.002 + cu * 0.996                       # keep off the cell border: no bleeding from the neighbour cell
             vts.append(np.c_[(c + cu[..., 0].ravel()) / cols, (r + cu[..., 1].ravel()) / rows])
@@ -598,6 +609,7 @@ def mesh():
     r = {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(h.V), 'nfhead': len(h.F)}
     if HEAD_VN is not None and HEAD_VN[1].shape == h.V.shape and np.array_equal(HEAD_VN[1], h.V):
         r['vn'] = np.round(HEAD_VN[0], 4).ravel().tolist()
+        r['cull'] = True      # a game model is drawn one-sided (the game and Blender cull the back faces); two-sided copies of a face must not fight
     return r
 
 
