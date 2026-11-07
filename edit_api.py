@@ -504,7 +504,8 @@ def replace_prepare(d, step=lambda msg, frac: None):
     dV, dF, uvinfo = _donor(d['donor'], d.get('part'))
     if d.get('scale') == 'open':      # show the model in the editor as it is: no mannequin, no neck, nothing is cut or scaled
         uv = {'vt': uvinfo['vt'], 'T': uvinfo['T'], 'img': uvinfo['img']} if uvinfo is not None else None
-        return {'hV': dV, 'hF': dF, 'rep': {'ring_gap': 0.0, 'scale': 1.0}, 'd': d, 'seam': 'none', 'uv': uv}
+        return {'hV': dV, 'hF': dF, 'rep': {'ring_gap': 0.0, 'scale': 1.0}, 'd': d, 'seam': 'none', 'uv': uv,
+                'vn': uvinfo.get('vn') if uvinfo is not None else None}
     dV, dF, uvinfo, cut = open_neck(dV, dF, uvinfo)
     body = A.parts['body']
     step('ищу кольца розетки', 0.35)
@@ -543,6 +544,8 @@ def replace_commit(p):
                     'seam': seam}, scores={'after': {'ring_gap': round(rep['ring_gap'], 4), 'scale': round(rep['scale'], 4),
                                                      **({'seam_stretch': rep['seam_stretch']} if 'seam_stretch' in rep else {})}})
     DRAFT = Selection(A.parts['head'])
+    global HEAD_VN
+    HEAD_VN = (np.asarray(p['vn'], float), A.parts['head'].V.copy()) if p.get('vn') is not None else None
     if p.get('uv'):
         import texture
         texture.register(A.parts['head'], p['uv']['vt'], p['uv']['T'], p['uv']['img'])
@@ -582,6 +585,9 @@ def state():
             'ops': [dict(o, stale_scores=bool(o.get('scores')) and i < len(A.log) - 1) for i, o in enumerate(A.log)], 'donors': DONORS, 'sources': sources(), 'can_undo': bool(A._undo), 'can_redo': bool(A._redo)}
 
 
+HEAD_VN = None     # (normals of the file, head vertices they belong to): the editor shades by them until the head changes
+
+
 def mesh():
     """head first (its vertex ids are the selection ids), then the body; nhead tells where the head ends"""
     _init()
@@ -589,7 +595,10 @@ def mesh():
     bV, bF = _body()
     V = np.vstack([h.V, bV])
     F = np.vstack([h.F, bF + len(h.V)])
-    return {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(h.V), 'nfhead': len(h.F)}
+    r = {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(h.V), 'nfhead': len(h.F)}
+    if HEAD_VN is not None and HEAD_VN[1].shape == h.V.shape and np.array_equal(HEAD_VN[1], h.V):
+        r['vn'] = np.round(HEAD_VN[0], 4).ravel().tolist()
+    return r
 
 
 def suggest_area(d):
