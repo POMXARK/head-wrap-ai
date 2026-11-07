@@ -376,7 +376,8 @@ async function buildTex(){const u=await (await fetch('/api/edit/mesh_uv')).json(
  if(tmesh){S.remove(tmesh);tg.dispose()}
  tg=new THREE.BufferGeometry();tg.setAttribute('position',new THREE.BufferAttribute(pos,3));tg.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(u.uv),2));tg.setAttribute('color',new THREE.BufferAttribute(new Float32Array(n*3).fill(1),3));{const gn=geo.attributes.normal.array,tn=new Float32Array(n*3);for(let i=0;i<n;i++){const v=HF[i];tn[i*3]=gn[v*3];tn[i*3+1]=gn[v*3+1];tn[i*3+2]=gn[v*3+2]}tg.setAttribute('normal',new THREE.BufferAttribute(tn,3))}
  if(!ttex)ttex=new THREE.CanvasTexture(TX);
- if(!tmesh)tmesh=new THREE.Mesh(tg,new THREE.MeshStandardMaterial({map:ttex,alphaTest:.5,vertexColors:true,roughness:.9,side:CULL?THREE.FrontSide:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}));else tmesh.geometry=tg;
+ if(tmesh&&tmesh.userData.basic!==CULL){S.remove(tmesh);tmesh.material.dispose();tmesh=null}
+ if(!tmesh){const P={map:ttex,alphaTest:.5,vertexColors:true,side:CULL?THREE.FrontSide:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1};tmesh=new THREE.Mesh(tg,CULL?new THREE.MeshBasicMaterial(P):new THREE.MeshStandardMaterial(Object.assign({roughness:.9},P)));tmesh.userData.basic=CULL}else tmesh.geometry=tg;
  S.add(tmesh);tmesh.visible=view=='tex'||(shade=='tex'&&view=='mesh');if(tmesh.visible)mesh.visible=false;tintT();return true}
 function tintT(){if(!tg)return;const c=tg.attributes.color.array,m=new Uint8Array(NH);for(const v of curIds)m[v]=1;for(let i=0;i<cornerV.length;i++){const k=m[cornerV[i]];c[i*3]=k?.55:1;c[i*3+1]=k?.8:1;c[i*3+2]=1}tg.attributes.color.needsUpdate=true}
 async function loadUV(){const r=await (await fetch('/api/edit/uv_layout')).json();if(r.error){toast(r.error,'err');return false}UVD=r;return true}
