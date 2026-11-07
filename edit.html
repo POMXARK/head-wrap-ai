@@ -82,6 +82,7 @@ select,input[type=text]{min-height:36px;padding:0 10px;border:1px solid var(--li
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 #mfr{position:fixed;left:0;right:0;top:48px;bottom:0;width:100%;height:calc(100% - 48px);border:0;background:var(--bg);z-index:4}#mfr[hidden]{display:none}
 body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
+.tree{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--panel2);padding:4px}.tree details>summary{cursor:pointer;padding:6px 8px;border-radius:6px;font-size:13px}.tree details>summary:hover{background:var(--panel)}.tree>details>summary{font-weight:650}.tree details.fl{margin-left:12px}.tree .parts{margin-left:14px;display:flex;flex-direction:column;gap:2px}.tree .prt{display:flex;justify-content:space-between;gap:8px;text-align:left;min-height:32px;padding:4px 10px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--fg);cursor:pointer;font-size:13px}.tree .prt:hover{background:var(--panel)}.tree .prt[aria-pressed=true]{background:var(--acc-soft);border-color:var(--acc)}.tree .prt small{color:var(--mut)}
 </style></head><body>
 <header class="top">
  <div class="seg wstabs" id="wst" role="tablist" aria-label="Рабочая зона"><button role="tab" id="ws-edit" aria-pressed="true" onclick="setWs('edit')">Редактирование</button><button role="tab" id="ws-model" aria-pressed="false" onclick="setWs('model')" title="Части любой GLB-модели: заменить, добавить, убрать, ремеш и UV">Части и ремеш</button></div>
@@ -163,12 +164,15 @@ body.wsm .top>*:not(.wstabs):not(.sp):not(.fbtn){display:none}
  <div><b>Экспорт</b><div class="help" id="xh" style="margin:4px 0 8px"></div>
   <label class="btn" style="justify-content:flex-start;margin-bottom:8px"><input type="checkbox" id="xb" onchange="xlinks()"> Вместе с манекеном (тело)</label>
   <div class="grid2"><a class="btn" id="x-glb" download>GLB (Blender, игра)</a><a class="btn" id="x-obj" download>OBJ</a><a class="btn" id="x-png" download>Текстура PNG</a><button class="btn" onclick="texExport()" title="Файлы work/head_edit.png и work/head_edit.obj на диске проекта">Сохранить в work/</button></div></div>
- <div><b>Импорт части</b><div class="help" style="margin:4px 0 8px">Три шага: 1) выберите источник — файл с компьютера или модель из списка (проект, игра); 2) выберите нужную часть; 3) нажмите «Импортировать». Она встанет на шею манекена; «Отменить» вернёт прежнюю.</div>
+ <div><b>Импорт части</b><div class="help" style="margin:4px 0 8px">Три шага: 1) щёлкните часть в дереве (или загрузите свой файл); 2) выберите, как вставить; 3) «Открыть в редакторе». «Отменить» в шапке вернёт прежнюю сцену.</div>
   <label class="btn" style="cursor:pointer;margin-bottom:8px">Загрузить файл с компьютера (.glb, .gltf, .obj)<input type="file" id="ifile" accept=".glb,.gltf,.obj" hidden onchange="upload(this.files[0])"></label>
-  <div class="fld"><div class="lb"><span>1. Источник</span></div><select id="dn" aria-label="Источник" onchange="loadParts()"></select><div class="help" id="dnh"></div></div>
-  <div class="fld"><div class="lb"><span>2. Часть файла</span></div><select id="dpart" aria-label="Часть файла"></select></div>
-  <div class="fld"><div class="lb"><span>Как вставить</span></div><select id="sc" aria-label="Масштаб"><option value="open">показать как есть (без манекена)</option><option value="match_ring">поставить на шею манекена</option><option value="keep">на шею, без масштаба</option></select></div>
-  <button class="btn primary wide" id="brp" onclick="rep()">3. Импортировать</button>
+  <div class="fld"><div class="lb"><span>1. Что взять — дерево моделей</span></div>
+   <div id="tree" class="tree" role="tree" aria-label="Источники, файлы и части"></div>
+   <div class="help">Раскройте группу → файл → часть и щёлкните часть. Как в Blender: файл — это «коллекция», части — объекты внутри неё.</div></div>
+  <div class="box" id="picked" aria-live="polite">Ничего не выбрано</div>
+  <div hidden><select id="dn" aria-label="Источник" onchange="loadParts()"></select><div id="dnh"></div><select id="dpart" aria-label="Часть файла"></select></div>
+  <div class="fld"><div class="lb"><span>2. Как вставить</span></div><select id="sc" aria-label="Как вставить"><option value="open">показать как есть (без манекена)</option><option value="match_ring">поставить на шею манекена</option><option value="keep">на шею, без масштаба</option></select><div class="help" id="sch">Часть открывается целиком, без манекена: так видно саму модель.</div></div>
+  <button class="btn primary wide" id="brp" onclick="rep()">3. Открыть в редакторе</button>
   <div id="prog" hidden><div class="prog"><i id="pb"></i></div><div class="grid2" style="grid-template-columns:1fr auto;align-items:center;margin-top:8px"><span id="pm" class="help"></span><button class="btn" id="pc" onclick="cancelJob()">Отмена</button></div></div>
   <div id="rrep" class="box" hidden></div><div id="sg0"></div></div>
 </div></dialog>
@@ -291,9 +295,20 @@ function info(st){fillSrc(st.sources);
 async function loadSel(id){snap();res(await post('select',{action:'load',id}))}
 async function delSel(id){await post('delete',{id});refresh()}
 /* импорт и экспорт */
-function fillSrc(src,pick){const cur=pick||$('dn').value;$('dn').innerHTML=src.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.label)+'</option>').join('');if(cur&&src.some(x=>x.id==cur))$('dn').value=cur;else{const o=src.find(x=>x.id!='template');if(o)$('dn').value=o.id}if(!$('dpart').options.length||pick)loadParts()}
-async function loadParts(){const r=await (await fetch('/api/edit/parts?src='+encodeURIComponent($('dn').value))).json();if(r.error){toast(r.error,'err');$('dpart').innerHTML='';return}
- const okp=r.parts.filter(p=>p.ok),big=(okp.length?okp:r.parts).reduce((a,b)=>b.vertices>a.vertices?b:a);$('dpart').innerHTML=r.parts.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+' ('+p.vertices+' вершин'+(p.ok?', подходит':', слишком мелкая')+')</option>').join('');$('dpart').value=big.name;$('dpart').disabled=r.parts.length<2;$('dnh').textContent=r.parts.length+' част'+(r.parts.length==1?'ь':'ей')+' в файле; '+(okp.length?'выбрана самая крупная подходящая':'подходящих частей нет — выберите другой файл')}
+function fillSrc(src,pick){const cur=pick||$('dn').value;$('dn').innerHTML=src.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.label)+'</option>').join('');buildTree(src);if(cur&&src.some(x=>x.id==cur))$('dn').value=cur;else{const o=src.find(x=>x.id!='template');if(o)$('dn').value=o.id}if(!$('dpart').options.length||pick)loadParts()}
+const PARTS={},GROUPS=[['Шаблон',x=>x.id=='template'],['Проект: work, models',x=>x.id.startsWith('file:')],['Игра',x=>/^(ext|gm):/.test(x.id)]],SCH={open:'Часть открывается целиком, без манекена: так видно саму модель.',match_ring:'Часть ставится на шею манекена и подгоняется по размеру кольца шеи — замена головы.',keep:'Как предыдущий, но размер части не меняется.'};
+$('sc').addEventListener('change',()=>$('sch').textContent=SCH[$('sc').value]);
+function buildTree(src){$('tree').innerHTML=GROUPS.map(([t,f])=>{const it=src.filter(f);return it.length?'<details open><summary>'+t+' <span class="help">('+it.length+')</span></summary>'+it.map(x=>'<details class="fl" data-src="'+esc(x.id)+'"><summary>'+esc(x.label.replace(/^(из )?игр[аы]: /,''))+'</summary><div class="parts help">загрузка…</div></details>').join('')+'</details>':''}).join('');
+ $('tree').querySelectorAll('details.fl').forEach(d=>d.addEventListener('toggle',()=>{if(d.open)fillFile(d)}))}
+async function fillFile(d){const id=d.dataset.src,box=d.querySelector('.parts');if(!PARTS[id]){const r=await (await fetch('/api/edit/parts?src='+encodeURIComponent(id))).json();if(r.error){box.textContent=r.error;return}PARTS[id]=r.parts}
+ box.className='parts';box.innerHTML=PARTS[id].map(p=>'<button class="prt" role="treeitem" data-p="'+esc(p.name)+'" aria-pressed="'+(id==$('dn').value&&p.name==$('dpart').value)+'"><span>'+esc(p.name)+'</span><small>'+p.vertices+' верш.'+(p.ok?'':' · мелкая')+'</small></button>').join('')}
+$('tree').addEventListener('click',e=>{const b=e.target.closest('.prt');if(!b)return;pickPart(b.closest('details.fl').dataset.src,b.dataset.p)});
+function pickPart(id,name){if(!PARTS[id])return;$('dn').value=id;$('dpart').innerHTML=PARTS[id].map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>').join('');$('dpart').value=name;
+ $('tree').querySelectorAll('.prt').forEach(b=>b.setAttribute('aria-pressed',b.closest('details.fl').dataset.src==id&&b.dataset.p==name));
+ const o=$('dn').selectedOptions[0];$('picked').innerHTML='Выбрано: <b>'+esc(o?o.textContent:id)+'</b> › <b>'+esc(name)+'</b>'}
+async function loadParts(){const id=$('dn').value;if(!id)return;const r=await (await fetch('/api/edit/parts?src='+encodeURIComponent(id))).json();if(r.error){toast(r.error,'err');$('dpart').innerHTML='';return}
+ PARTS[id]=r.parts;const okp=r.parts.filter(p=>p.ok),big=(okp.length?okp:r.parts).reduce((a,b)=>b.vertices>a.vertices?b:a);
+ const d=$('tree').querySelector('details.fl[data-src="'+CSS.escape(id)+'"]');if(d){d.open=true;await fillFile(d)}pickPart(id,big.name)}
 async function upload(f){if(!f)return;if(f.size>64<<20){toast('Файл больше 64 МБ','err');return}const r=await (await fetch('/api/edit/upload?name='+encodeURIComponent(f.name),{method:'POST',body:f})).json();$('ifile').value='';
  if(r.error){toast(r.error,'err');return}const st=await (await fetch('/api/edit/state')).json();fillSrc(st.sources,r.id);toast('Файл загружен: выберите нужную часть и нажмите «Импортировать»','ok')}
 function xlinks(){const b=$('xb').checked?'&body=1':'';for(const f of['glb','obj','png'])$('x-'+f).href='/api/edit/export?fmt='+f+(f=='glb'?b:'');$('xh').textContent=TI.available?'Модель с текущими правками формы, текстуры и UV.':'Только форма: у неё нет UV и текстуры.'}
