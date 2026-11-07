@@ -179,7 +179,7 @@ def donor_parts(name):
     out = []
     if len(g) > 1:
         out.append({'name': ALL, 'vertices': int(sum(len(v.vertices) for v in g.values())), 'ok': True,
-                    'label': '★ Вся модель (%d частей, без текстуры)' % len(g)})
+                    'label': '★ Вся модель (%d частей, текстуры в одном атласе)' % len(g)})
     for k, v in g.items():
         ok = False
         if len(v.vertices) >= 30:
@@ -204,6 +204,46 @@ def _donor_ring(dV, dF):
     return max(loops, key=len)
 
 
+def _merge_all(ms):
+    """every part of a file as one mesh with ONE texture: part textures go into a grid atlas (the editor holds one texture);
+    a part without texture gets a flat cell of its colour. Returns (V, F, uvinfo)"""
+    from PIL import Image
+    n = len(ms)
+    cols = int(np.ceil(np.sqrt(n)))
+    rows = int(np.ceil(n / cols))
+    cell = 1024 if n <= 4 else 512
+    atlas = Image.new('RGB', (cols * cell, rows * cell), (200, 200, 200))
+    Vs, Fs, vts, Ts, o, ov = [], [], [], [], 0, 0
+    for i, m in enumerate(ms):
+        c, r = i % cols, i // cols
+        mat = getattr(m.visual, 'material', None)
+        img = getattr(mat, 'baseColorTexture', None) or getattr(mat, 'image', None)
+        uv = getattr(m.visual, 'uv', None)
+        box = (c * cell, (rows - 1 - r) * cell)
+        if uv is not None and len(uv) == len(m.vertices) and img is not None:
+            atlas.paste(img.convert('RGB').resize((cell, cell)), box)
+            u = np.asarray(uv, float)
+            if u.min() < 0 or u.max() > 1:
+                u = np.mod(u, 1.0)
+        else:
+            col = (200, 200, 200)
+            try:
+                col = tuple(int(x) for x in mat.main_color[:3])
+            except Exception:
+                pass
+            atlas.paste(Image.new('RGB', (cell, cell), col), box)
+            u = np.full((len(m.vertices), 2), 0.5)
+        vts.append(np.c_[(c + u[:, 0]) / cols, (r + u[:, 1]) / rows])
+        Vs.append(np.asarray(m.vertices, float))
+        f = np.asarray(m.faces, int)
+        Fs.append(f + o)
+        Ts.append(f + o)
+        o += len(m.vertices)
+    V, inv = np.unique(np.vstack(Vs).round(6), axis=0, return_inverse=True)
+    F = np.vstack(Fs)
+    return V, inv.ravel()[F], {'vt': np.vstack(vts), 'T': np.vstack(Ts), 'img': atlas}
+
+
 def _donor(name, part=None):
     rel = _resolve(name)
     if rel is None:
@@ -213,14 +253,8 @@ def _donor(name, part=None):
         return m.V, m.F, {'vt': vt, 'T': T, 'img': tex}
     import trimesh
     geoms = _geoms(os.path.join(HERE, rel))
-    if part == ALL and len(geoms) > 1:     # all parts in one mesh; several textures cannot be one, so no UV
-        Vs, Fs, o = [], [], 0
-        for m in geoms.values():
-            Vs.append(np.asarray(m.vertices, float))
-            Fs.append(np.asarray(m.faces, int) + o)
-            o += len(m.vertices)
-        V, inv = np.unique(np.vstack(Vs).round(6), axis=0, return_inverse=True)
-        return V, inv.ravel()[np.vstack(Fs)], None
+    if part == ALL and len(geoms) > 1:     # all parts in one mesh; their textures are packed into one atlas, UV remapped
+        return _merge_all(list(geoms.values()))
     g = geoms[part] if part in geoms else (geoms['geometry_0'] if name == 'hero1' else max(geoms.values(), key=lambda x: len(x.vertices)))
     V, inv = np.unique(g.vertices.round(6), axis=0, return_inverse=True)
     uv = getattr(g.visual, 'uv', None)

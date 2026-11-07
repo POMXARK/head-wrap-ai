@@ -10,4 +10,7 @@ n_parts = sum(e.part_mesh('file:work/hero1_eye.glb', p['name'])['faces'] for p i
 assert abs(n_all - n_parts) < 0.05 * n_parts, (n_all, n_parts)
 e.replace_head({'donor': 'file:work/hero1_eye.glb', 'part': '__all__', 'scale': 'open'})
 assert e.mesh()['nhead'] * 3 == len(e.mesh()['v'])
+assert e.tex_info()['available'], 'whole model keeps its textures (atlas)'
+V, F, u = e._donor('file:work/hero1_eye.glb', '__all__')
+assert u is not None and u['img'].size[0] >= 1024 and 0 <= u['vt'].min() and u['vt'].max() <= 1, 'atlas uv in 0..1'
 print('PASS test_import_whole_model')
