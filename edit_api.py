@@ -600,9 +600,10 @@ def replace_commit(p):
                                                      **({'seam_stretch': rep['seam_stretch']} if 'seam_stretch' in rep else {})}})
     DRAFT = Selection(A.parts['head'])
     global HEAD_VN
-    HEAD_VN = (np.asarray(p['vn'], float), A.parts['head'].V.copy()) if p.get('vn') is not None else None
     global HEAD_PARTS
-    HEAD_PARTS = p.get('parts')
+    if p.get('vn') is not None:     # another head keeps the file state: file_model_state() checks the faces, undo back to the file restores the parts
+        HEAD_VN = (np.asarray(p['vn'], float), A.parts['head'].V.copy(), A.parts['head'].F.copy())
+        HEAD_PARTS = p.get('parts')
     if p.get('uv'):
         import texture
         texture.register(A.parts['head'], p['uv']['vt'], p['uv']['T'], p['uv']['img'])
@@ -643,7 +644,32 @@ def state():
 
 
 HEAD_PARTS = None  # [[name, v0, v1]]: vertex ranges of the file parts inside the head mesh
-HEAD_VN = None     # (normals of the file, head vertices they belong to): the editor shades by them until the head changes
+HEAD_VN = None     # (normals of the file, head vertices and faces they belong to): kept while the faces stay the same (edits move vertices only)
+
+
+def file_model_state(V=None, F=None):
+    """the head is still the model opened from a file (same faces; edits only move vertices): {'moved': bool per vertex} or None"""
+    if HEAD_VN is None:
+        return None
+    h = A.parts['head']
+    V = h.V if V is None else V
+    F = h.F if F is None else F
+    if HEAD_VN[1].shape != V.shape or HEAD_VN[2].shape != F.shape or not np.array_equal(HEAD_VN[2], F):
+        return None
+    return {'moved': np.linalg.norm(V - HEAD_VN[1], axis=1) > 1e-7}
+
+
+def _file_fields(r, V, F):
+    """parts, one-sided drawing and file normals while the head (V, F) is still the model opened from a file"""
+    st = file_model_state(V, F)
+    if st is None:
+        return
+    r['vn'] = np.round(HEAD_VN[0], 4).ravel().tolist()
+    if st['moved'].any():     # moved vertices and their neighbours: the editor computes normals from the faces, the rest keep the file's
+        r['vn_moved'] = np.unique(F[st['moved'][F].any(1)]).tolist()
+    if HEAD_PARTS:
+        r['parts'] = HEAD_PARTS
+    r['cull'] = True      # a game model is drawn one-sided (the game and Blender cull the back faces); two-sided copies of a face must not fight
 
 
 def mesh():
@@ -654,11 +680,7 @@ def mesh():
     V = np.vstack([h.V, bV])
     F = np.vstack([h.F, bF + len(h.V)])
     r = {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(h.V), 'nfhead': len(h.F)}
-    if HEAD_VN is not None and HEAD_VN[1].shape == h.V.shape and np.array_equal(HEAD_VN[1], h.V):
-        r['vn'] = np.round(HEAD_VN[0], 4).ravel().tolist()
-        if HEAD_PARTS:
-            r['parts'] = HEAD_PARTS
-        r['cull'] = True      # a game model is drawn one-sided (the game and Blender cull the back faces); two-sided copies of a face must not fight
+    _file_fields(r, h.V, h.F)
     return r
 
 
@@ -684,8 +706,10 @@ def before():
     moved = float(np.linalg.norm(V0 - h.V, axis=1).max()) if len(V0) == len(h.V) else None
     V = np.vstack([V0, bV])
     F = np.vstack([F0, bF + len(V0)])
-    return {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(V0), 'nfhead': len(F0),
-            'op': A.log[-1]['op'], 'max_move': moved}
+    r = {'v': np.round(V, 5).ravel().tolist(), 'f': F.ravel().tolist(), 'nhead': len(V0), 'nfhead': len(F0),
+         'op': A.log[-1]['op'], 'max_move': moved}
+    _file_fields(r, V0, F0)
+    return r
 
 
 def select(d):
